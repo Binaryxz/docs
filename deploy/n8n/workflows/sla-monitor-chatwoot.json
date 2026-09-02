@@ -1,0 +1,114 @@
+{
+  "name": "Módulo Vendas - SLA Chatwoot (BR/EU)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "A cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1040, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "set-regions",
+      "name": "Regiões (BR/EU)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-820, 300],
+      "notes": "Emite 2 itens: um para CHATWOOT_BR_*, outro para CHATWOOT_EU_*. Configure na UI do n8n com as credenciais reais."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.chatwoot_base_url}}/api/v1/accounts/{{$json.chatwoot_account_id}}/conversations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "open" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-open-conversations",
+      "name": "Buscar conversas abertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mantém apenas conversas sem resposta do time há mais de 1 hora\nconst ONE_HOUR_MS = 60 * 60 * 1000;\nconst now = Date.now();\nconst items = $input.all();\nconst overdue = [];\n\nfor (const item of items) {\n  const conversations = item.json.payload || item.json.data?.payload || [];\n  for (const conv of conversations) {\n    const lastOutgoing = conv.last_activity_at ? conv.last_activity_at * 1000 : null;\n    const waitingSince = conv.waiting_since ? conv.waiting_since * 1000 : lastOutgoing;\n    if (waitingSince && (now - waitingSince) > ONE_HOUR_MS) {\n      overdue.push({\n        json: {\n          region: item.json.region,\n          conversation_id: conv.id,\n          contact_name: conv.meta?.sender?.name || 'desconhecido',\n          minutes_waiting: Math.round((now - waitingSince) / 60000)\n        }\n      });\n    }\n  }\n}\n\nreturn overdue;"
+      },
+      "id": "filter-sla",
+      "name": "Filtrar SLA > 1h",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-380, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://automaton:3000/suggest-reply",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"channel\": \"chatwoot\", \"region\": $json.region, \"conversation_id\": $json.conversation_id } }}",
+        "options": {}
+      },
+      "id": "ask-automaton",
+      "name": "Pedir sugestão ao agente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-160, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{$json.region === 'BR' ? $env.WHATSAPP_BR_PHONE_NUMBER_ID : $env.WHATSAPP_EU_PHONE_NUMBER_ID}}",
+        "recipientPhoneNumber": "={{$json.approver_phone}}",
+        "textBody": "=SLA estourado ({{$json.minutes_waiting}} min) - {{$json.contact_name}}\n\nSugestão de resposta:\n{{$json.suggested_reply}}\n\nAprovar? Responda APROVAR, EDITAR ou REJEITAR."
+      },
+      "id": "notify-approver",
+      "name": "Enviar alerta + sugestão (WhatsApp interno)",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [60, 300],
+      "notes": "Requer credencial do WhatsApp Cloud API configurada no n8n. O envio ao CLIENTE só acontece depois da aprovação (ver approval-callback.json)."
+    }
+  ],
+  "connections": {
+    "A cada 5 minutos": {
+      "main": [[{ "node": "Regiões (BR/EU)", "type": "main", "index": 0 }]]
+    },
+    "Regiões (BR/EU)": {
+      "main": [[{ "node": "Buscar conversas abertas", "type": "main", "index": 0 }]]
+    },
+    "Buscar conversas abertas": {
+      "main": [[{ "node": "Filtrar SLA > 1h", "type": "main", "index": 0 }]]
+    },
+    "Filtrar SLA > 1h": {
+      "main": [[{ "node": "Pedir sugestão ao agente", "type": "main", "index": 0 }]]
+    },
+    "Pedir sugestão ao agente": {
+      "main": [[{ "node": "Enviar alerta + sugestão (WhatsApp interno)", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

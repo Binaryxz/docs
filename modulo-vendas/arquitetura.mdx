@@ -28,6 +28,10 @@ O [Conway Automaton](https://github.com/Conway-Research/automaton) organiza o co
 
 Cada agente tem acesso apenas às ferramentas (tools) necessárias para sua função, reduzindo o raio de ação de erros e facilitando auditoria.
 
+<Warning>
+  O Conway Automaton é, por padrão, um framework de agente autônomo de propósito geral: gera sua própria carteira on-chain, pode gastar créditos, se auto-modificar e se auto-replicar. Nada disso é necessário para este módulo. Antes de qualquer deploy, siga o checklist de restrições em [Deploy na Run on Flux](/modulo-vendas/deploy) para travar essas capacidades e garantir que nenhum envio a cliente ocorra sem aprovação humana.
+</Warning>
+
 ### Orquestração — n8n ou LangGraph
 
 <Tabs>

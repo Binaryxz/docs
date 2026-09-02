@@ -64,7 +64,8 @@
         "modulo-vendas/funcionalidades",
         "modulo-vendas/arquitetura",
         "modulo-vendas/integracoes",
-        "modulo-vendas/fluxo-aprovacao"
+        "modulo-vendas/fluxo-aprovacao",
+        "modulo-vendas/deploy"
       ]
     },
     {

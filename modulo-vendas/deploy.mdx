@@ -1,0 +1,40 @@
+---
+title: 'Deploy na Run on Flux'
+description: 'Como publicar a stack do Módulo 1 – Vendas em uma instância GPU da Run on Flux'
+icon: 'server'
+---
+
+Os artefatos de deploy (Docker Compose, Dockerfile do Conway Automaton, workflows do n8n, configuração do Caddy) ficam em [`/deploy`](https://github.com/Binaryxz/docs/tree/main/deploy) neste repositório — não como páginas de documentação, mas como código pronto para rodar.
+
+<Warning>
+  Publicar essa stack é uma ação real de infraestrutura: aluga uma instância paga na Flux, expõe webhooks públicos e, se o [Conway Automaton](https://github.com/Conway-Research/automaton) não for configurado corretamente, roda um agente com carteira e capacidades de auto-replicação próprias. Leia [`deploy/automaton/README.md`](https://github.com/Binaryxz/docs/tree/main/deploy/automaton/README.md) **antes** de subir em produção.
+</Warning>
+
+## O que tem em `/deploy`
+
+<CardGroup cols={2}>
+  <Card title="docker-compose.yml" icon="docker">
+    Orquestra 4 serviços: `olmo` (vLLM servindo OLMo 3 32B), `automaton` (Conway Automaton), `n8n` e `caddy` (proxy/TLS).
+  </Card>
+  <Card title=".env.example" icon="key">
+    Todas as variáveis necessárias — domínio, Chatwoot BR/EU, WhatsApp, Meta Ads, Google Ads, e-mail, e as flags de segurança do Automaton.
+  </Card>
+  <Card title="automaton/" icon="robot">
+    Dockerfile do Conway Automaton + `genesis-prompt.md` (mandato e restrições do agente) + checklist de segurança obrigatório.
+  </Card>
+  <Card title="n8n/workflows/" icon="diagram-project">
+    Dois workflows prontos para importar: monitor de SLA do Chatwoot e o fluxo de aprovação/envio/registro.
+  </Card>
+</CardGroup>
+
+## Passo a passo
+
+O guia completo — alugar a instância GPU, apontar DNS, subir os containers, configurar o n8n e testar de ponta a ponta — está em [`deploy/README.md`](https://github.com/Binaryxz/docs/tree/main/deploy/README.md).
+
+<Note>
+  Não foi possível validar a interface atual de `cloud.runonflux.com` a partir deste ambiente (acesso de rede bloqueado). O guia descreve o fluxo esperado de um marketplace de instâncias GPU — confirme os nomes de tela reais no seu dashboard da Flux.
+</Note>
+
+## Cobertura atual
+
+Os dois workflows de exemplo implementam o núcleo do loop descrito em [Fluxo de Aprovação](/modulo-vendas/fluxo-aprovacao): monitorar SLA → sugerir resposta → aprovar → enviar → registrar. As demais funcionalidades (correlação com Meta/Google Ads, avaliação de influencers, análise de outbound) seguem o mesmo padrão de integração e ainda precisam de workflows dedicados — ver [Funcionalidades](/modulo-vendas/funcionalidades).
