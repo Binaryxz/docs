@@ -1,0 +1,106 @@
+name: modulo-vendas
+
+services:
+  # ---------------------------------------------------------------------
+  # Reverse proxy + TLS automático
+  # ---------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - n8n
+      - automaton
+
+  # ---------------------------------------------------------------------
+  # LLM — OLMo 3 32B servido via vLLM (API compatível com OpenAI)
+  # Requer GPU com VRAM suficiente para um modelo de 32B (recomendado
+  # 2x GPUs de 48GB+ ou 1x GPU de 80GB em fp16; use --quantization para
+  # rodar em hardware menor).
+  # ---------------------------------------------------------------------
+  olmo:
+    image: vllm/vllm-openai:latest
+    restart: unless-stopped
+    command:
+      - "--model=${OLMO_MODEL_ID}"
+      - "--max-model-len=${OLMO_MAX_MODEL_LEN}"
+      - "--api-key=${OLMO_API_KEY}"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+    volumes:
+      - olmo_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    expose:
+      - "8000"
+
+  # ---------------------------------------------------------------------
+  # Orquestração de fluxos (webhooks, SLA, aprovação, envio)
+  # ---------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PROTOCOL=${N8N_PROTOCOL}
+      - N8N_PORT=5678
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/workflows:ro
+    expose:
+      - "5678"
+    depends_on:
+      - olmo
+
+  # ---------------------------------------------------------------------
+  # Conway Automaton — agente que lê, decide e prepara respostas.
+  # Roda TRAVADO (sem auto-replicação, sem gasto on-chain autônomo) e
+  # SEM enviar nada diretamente: toda saída passa pelo webhook de
+  # aprovação do n8n. Veja deploy/automaton/README.md.
+  # ---------------------------------------------------------------------
+  automaton:
+    build: ./automaton
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - AUTOMATON_INFERENCE_BASE_URL=${AUTOMATON_INFERENCE_BASE_URL}
+      - AUTOMATON_INFERENCE_API_KEY=${AUTOMATON_INFERENCE_API_KEY}
+      - AUTOMATON_WALLET_PRIVATE_KEY=${AUTOMATON_WALLET_PRIVATE_KEY}
+      - AUTOMATON_ALLOW_SELF_REPLICATION=${AUTOMATON_ALLOW_SELF_REPLICATION}
+      - AUTOMATON_ALLOW_ONCHAIN_SPEND=${AUTOMATON_ALLOW_ONCHAIN_SPEND}
+      - AUTOMATON_APPROVAL_WEBHOOK_URL=${AUTOMATON_APPROVAL_WEBHOOK_URL}
+    volumes:
+      - automaton_state:/app/state
+    expose:
+      - "3000"
+    depends_on:
+      - olmo
+      - n8n
+
+volumes:
+  caddy_data:
+  caddy_config:
+  olmo_cache:
+  n8n_data:
+  automaton_state:

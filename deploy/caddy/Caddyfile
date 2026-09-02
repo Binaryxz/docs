@@ -1,0 +1,25 @@
+{$DOMAIN} {
+	tls {$ACME_EMAIL}
+
+	# Painel/API do n8n (fluxos, webhooks de Chatwoot/WhatsApp/e-mail)
+	handle_path /n8n/* {
+		reverse_proxy n8n:5678
+	}
+	handle /webhook/* {
+		reverse_proxy n8n:5678
+	}
+	handle /webhook-test/* {
+		reverse_proxy n8n:5678
+	}
+
+	# API do agente (Conway Automaton) — apenas para uso interno/n8n,
+	# não exponha publicamente sem autenticação adicional.
+	handle_path /automaton/* {
+		reverse_proxy automaton:3000
+	}
+
+	# Raiz aponta para o n8n por padrão
+	handle {
+		reverse_proxy n8n:5678
+	}
+}

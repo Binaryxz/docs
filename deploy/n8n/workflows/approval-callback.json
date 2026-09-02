@@ -1,0 +1,185 @@
+{
+  "name": "Módulo Vendas - Aprovação e Envio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-approval-request",
+      "name": "Recebe sugestão do agente",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1040, 400],
+      "webhookId": "approval-request",
+      "notes": "URL correspondente a AUTOMATON_APPROVAL_WEBHOOK_URL no .env. O Automaton publica aqui toda sugestão, para uma pessoa decidir."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"queued_for_approval\" } }}"
+      },
+      "id": "ack-automaton",
+      "name": "Confirma recebimento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-820, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aqui a sugestão fica pendente até um humano decidir.\n// Em produção: persista em uma tabela/planilha (status=pending) e\n// notifique o aprovador (ex.: mensagem de WhatsApp interno com botões\n// Aprovar/Editar/Rejeitar, ou um card em um painel).\nreturn $input.all();"
+      },
+      "id": "persist-pending",
+      "name": "Registrar como pendente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-820, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval-decision",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-approval-decision",
+      "name": "Recebe decisão humana",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1040, 700],
+      "webhookId": "approval-decision",
+      "notes": "Disparado pela interação do aprovador (resposta no WhatsApp interno, clique em um painel, etc.). Espera { conversation_id, decision: approved|edited|rejected, final_text, channel, region }."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.decision}}",
+                    "rightValue": "approved",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "outputKey": "approved"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.decision}}",
+                    "rightValue": "edited",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "outputKey": "edited"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "rejected" }
+      },
+      "id": "switch-decision",
+      "name": "approved / edited / rejected",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-820, 700]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{$json.region === 'BR' ? $env.WHATSAPP_BR_PHONE_NUMBER_ID : $env.WHATSAPP_EU_PHONE_NUMBER_ID}}",
+        "recipientPhoneNumber": "={{$json.customer_phone}}",
+        "textBody": "={{$json.final_text}}"
+      },
+      "id": "send-whatsapp",
+      "name": "Enviar ao cliente (WhatsApp)",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [-600, 620]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.EMAIL_SMTP_USER}}",
+        "toEmail": "={{$json.customer_email}}",
+        "subject": "={{$json.email_subject}}",
+        "text": "={{$json.final_text}}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Enviar ao cliente (E-mail)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [-600, 760],
+      "notes": "Usado quando $json.channel === 'email'. Configure a credencial SMTP no n8n."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rejeitado: nada é enviado. Só registra o motivo/feedback para o loop\n// de aprendizado (ex.: alimentar o próximo prompt do agente).\nreturn $input.all();"
+      },
+      "id": "log-rejected",
+      "name": "Registrar rejeição",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-600, 900]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{{$json.chatwoot_base_url}}/api/v1/accounts/{{$json.chatwoot_account_id}}/conversations/{{$json.conversation_id}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"content\": \"[loop] decisão=\" + $json.decision + \" resultado registrado\", \"private\": true } }}",
+        "options": {}
+      },
+      "id": "log-result-chatwoot",
+      "name": "Registrar resultado no Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-380, 700]
+    }
+  ],
+  "connections": {
+    "Recebe sugestão do agente": {
+      "main": [
+        [
+          { "node": "Confirma recebimento", "type": "main", "index": 0 },
+          { "node": "Registrar como pendente", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Recebe decisão humana": {
+      "main": [[{ "node": "approved / edited / rejected", "type": "main", "index": 0 }]]
+    },
+    "approved / edited / rejected": {
+      "main": [
+        [{ "node": "Enviar ao cliente (WhatsApp)", "type": "main", "index": 0 }],
+        [{ "node": "Enviar ao cliente (WhatsApp)", "type": "main", "index": 0 }],
+        [{ "node": "Registrar rejeição", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enviar ao cliente (WhatsApp)": {
+      "main": [[{ "node": "Registrar resultado no Chatwoot", "type": "main", "index": 0 }]]
+    },
+    "Enviar ao cliente (E-mail)": {
+      "main": [[{ "node": "Registrar resultado no Chatwoot", "type": "main", "index": 0 }]]
+    },
+    "Registrar rejeição": {
+      "main": [[{ "node": "Registrar resultado no Chatwoot", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

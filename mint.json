@@ -58,6 +58,17 @@
       ]
     },
     {
+      "group": "Módulo 1 – Vendas",
+      "pages": [
+        "modulo-vendas/visao-geral",
+        "modulo-vendas/funcionalidades",
+        "modulo-vendas/arquitetura",
+        "modulo-vendas/integracoes",
+        "modulo-vendas/fluxo-aprovacao",
+        "modulo-vendas/deploy"
+      ]
+    },
+    {
       "group": "Essentials",
       "pages": [
         "essentials/markdown",
