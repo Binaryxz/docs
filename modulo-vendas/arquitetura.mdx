@@ -1,0 +1,89 @@
+---
+title: 'Arquitetura e Stack Técnica'
+description: 'LLM, framework de agentes, orquestração e hospedagem do Módulo 1 – Vendas'
+icon: 'sitemap'
+---
+
+## Stack técnica
+
+| Camada | Escolha | Papel |
+| --- | --- | --- |
+| LLM | **OLMo 3 32B** | Raciocínio, classificação de conversas, geração de sugestões de resposta e de melhoria |
+| Modelo agentic | **[Conway Automaton](https://github.com/Conway-Research/automaton)** | Define os agentes (atendimento, mídia paga, influencers, outbound), suas ferramentas e memória |
+| Orquestração de fluxos | **n8n** ou **LangGraph** | Conecta gatilhos, chamadas de API, aprovação humana e persistência de estado |
+| Hospedagem | **[Run on Flux](https://runonflux.com/)** | Infraestrutura descentralizada para rodar o LLM, os agentes e os workflows |
+
+### LLM — OLMo 3 32B
+
+Modelo aberto usado como motor de raciocínio de todos os agentes. Servido via um endpoint compatível com OpenAI (ex.: vLLM ou Ollama) atrás da rede Flux, para que tanto o Conway Automaton quanto os workflows de orquestração o chamem como um serviço único e centralizado — evitando duplicar prompts/contexto entre os módulos.
+
+### Modelo agentic — Conway Automaton
+
+O [Conway Automaton](https://github.com/Conway-Research/automaton) organiza o comportamento de cada agente do módulo:
+
+- **Agente de Atendimento** — monitora Chatwoot/WhatsApp, calcula SLA, sugere respostas.
+- **Agente de Mídia Paga** — lê Meta Ads e Google Ads, correlaciona com Chatwoot, gera recomendações.
+- **Agente de Influencers** — segmenta conversas por origem de influencer e avalia desempenho.
+- **Agente de Outbound** — analisa listas, consultorias e equipes de disparo.
+
+Cada agente tem acesso apenas às ferramentas (tools) necessárias para sua função, reduzindo o raio de ação de erros e facilitando auditoria.
+
+### Orquestração — n8n ou LangGraph
+
+<Tabs>
+  <Tab title="n8n">
+    Recomendado quando a maior parte do trabalho é **integração** (webhooks do Chatwoot, APIs de Meta/Google Ads, envio de WhatsApp/e-mail) e a equipe quer editar fluxos visualmente sem depender de deploys de código.
+  </Tab>
+  <Tab title="LangGraph">
+    Recomendado quando a lógica do agente exige **estado e decisão mais complexos** (múltiplos passos de raciocínio, loops de auto-correção, ramificações condicionais no processo de aprovação), com o fluxo versionado como código.
+  </Tab>
+</Tabs>
+
+Na prática, o módulo pode usar os dois: **n8n** como camada de integração/gatilhos (webhooks, agendamentos, envio de mensagens) chamando **LangGraph** para os trechos de raciocínio multi-passo do agente, com o Conway Automaton definindo os agentes que o LangGraph orquestra.
+
+### Hospedagem — Run on Flux
+
+O LLM, os agentes e os workflows rodam sobre a rede descentralizada da [Run on Flux](https://runonflux.com/), o que permite escalar horizontalmente conforme o volume de conversas/campanhas e manter a operação independente de um único provedor de nuvem.
+
+## Visão de arquitetura
+
+```mermaid
+flowchart LR
+    subgraph Fontes
+        CW[Chatwoot BR/EU]
+        WA[WhatsApp]
+        MA[Meta Ads]
+        GA[Google Ads]
+        OB[Listas de Outbound]
+        EM[E-mail]
+    end
+
+    subgraph Orquestracao["Orquestração (n8n / LangGraph)"]
+        ING[Ingestão e gatilhos]
+        AG[Agentes - Conway Automaton]
+        APR[Fila de aprovação]
+    end
+
+    LLM[(OLMo 3 32B)]
+    HUM[Aprovador humano]
+    LOG[(Registro de resultados)]
+
+    CW --> ING
+    WA --> ING
+    MA --> ING
+    GA --> ING
+    OB --> ING
+    EM --> ING
+
+    ING --> AG
+    AG <--> LLM
+    AG --> APR
+    APR --> HUM
+    HUM -- aprova/edita/rejeita --> APR
+    APR --> WA
+    APR --> EM
+    APR --> LOG
+    LOG --> AG
+```
+
+Toda a infraestrutura acima (orquestração, agentes e LLM) roda hospedada na Run on Flux.

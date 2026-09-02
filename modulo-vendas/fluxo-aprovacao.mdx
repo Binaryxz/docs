@@ -1,0 +1,38 @@
+---
+title: 'Fluxo de Aprovação e Loop de Resultado'
+description: 'Como uma sugestão de resposta vira uma mensagem enviada — e como o resultado realimenta o agente'
+icon: 'rotate'
+---
+
+Nenhuma mensagem gerada pelo agente é enviada a um cliente sem revisão humana. O fluxo abaixo é o mesmo para conversas de atendimento, alertas de SLA e disparos de outbound, nos canais de WhatsApp e e-mail.
+
+<Steps>
+  <Step title="Leitura">
+    O agente identifica uma conversa/pendência que precisa de resposta (nova mensagem do cliente, SLA de 1 hora estourando, ou próxima etapa de uma campanha de outbound).
+  </Step>
+  <Step title="Geração da sugestão">
+    O LLM (OLMo 3 32B), orquestrado pelo agente correspondente (Conway Automaton), gera uma sugestão de resposta usando o histórico completo da conversa e o contexto de campanha/origem.
+  </Step>
+  <Step title="Envio para aprovação">
+    A sugestão é enviada ao responsável pelo canal de aprovação (WhatsApp interno, hoje; extensível a outro canal de aprovação no futuro).
+  </Step>
+  <Step title="Decisão humana">
+    O aprovador **aprova**, **edita** ou **rejeita** a sugestão.
+  </Step>
+  <Step title="Envio">
+    Se aprovada (com ou sem edição), a mensagem é enviada automaticamente pelo canal de origem — WhatsApp ou e-mail.
+  </Step>
+  <Step title="Registro do resultado">
+    O agente registra: decisão do aprovador (aprovado/editado/rejeitado), se o cliente respondeu, e se a conversa avançou no funil (interesse, conversão). Esse registro alimenta os relatórios de [funcionalidades](/modulo-vendas/funcionalidades) e serve de referência para as próximas sugestões do mesmo agente.
+  </Step>
+</Steps>
+
+## Por que manter humano no loop
+
+- **Risco comercial** — uma resposta errada a um cliente tem custo maior do que o tempo gasto aprovando.
+- **Qualidade do dado de treino** — cada edição do aprovador é um sinal explícito do que o agente deveria ter sugerido, útil para ajustar prompts/regras ao longo do tempo.
+- **Conformidade** — respostas em nome da empresa, por e-mail ou WhatsApp, continuam sob responsabilidade de uma pessoa.
+
+<Note>
+  O objetivo do módulo não é eliminar o time comercial da conversa, e sim eliminar o trabalho de *redigir do zero* e de *monitorar SLA manualmente* — o humano decide, o agente prepara.
+</Note>

@@ -1,0 +1,45 @@
+---
+title: 'Integrações'
+description: 'Como o agente se conecta a Chatwoot, WhatsApp, Meta Ads, Google Ads, e-mail e outbound'
+icon: 'plug'
+---
+
+## Chatwoot (Brasil e Europa)
+
+- Uma conexão por instância/conta do Chatwoot (Brasil e Europa são tratados como fontes separadas, para não misturar SLA e métricas de regiões diferentes).
+- Consumo via **webhooks** (`conversation_created`, `conversation_updated`, `message_created`) para monitoramento em tempo real de SLA, e via **API REST** para varreduras periódicas (relatórios de tempo de resposta, interesse, conversão).
+- Cada conversa é enriquecida com metadados (origem: influencer, campanha paga, outbound) para permitir a correlação usada nas demais funcionalidades.
+
+## WhatsApp Business
+
+- Canal de **atendimento** ao cliente (via inbox do Chatwoot) e canal de **aprovação interna** (o agente envia a sugestão de resposta para o time aprovar).
+- Envio de mensagens após aprovação usa a API oficial (WhatsApp Cloud API ou provedor BSP já em uso), respeitando as janelas de mensagem e templates aprovados quando aplicável.
+- Brasil e Europa podem usar números/BSPs diferentes; a orquestração seleciona a conta correta com base na origem da conversa.
+
+## Meta Ads
+
+- Leitura via **Marketing API** (Meta Ads Insights): campanhas, conjuntos de anúncios, criativos e métricas (gasto, CPL, CPA, CTR).
+- Os IDs de campanha/criativo são casados com o UTM/origem registrado na conversa do Chatwoot para a correlação de performance.
+
+## Google Ads
+
+- Leitura via **Google Ads API**: campanhas, grupos de anúncios, palavras-chave e métricas (custo, CPA, taxa de conversão reportada).
+- Mesma lógica de casamento por UTM/origem com as conversas do Chatwoot.
+
+## Influencers
+
+- Não é uma integração separada: reaproveita os dados do Chatwoot filtrados por tag/origem de influencer (UTM ou código de parceria), cruzando com o resultado de conversão de cada conversa.
+
+## Outbound (consultorias e listas de disparo)
+
+- As listas de disparo e o mapeamento de qual **consultoria**/**equipe de disparo** é responsável por cada lista ficam registrados em uma planilha ou CRM já usado pelas equipes; o agente lê essa referência para atribuir corretamente os resultados de cada campanha à lista e à equipe de origem.
+- Os disparos em si (e-mail e WhatsApp) e as respostas recebidas seguem o mesmo pipeline de leitura/análise do Chatwoot/e-mail.
+
+## E-mail
+
+- Leitura de caixa de entrada (IMAP ou API do provedor, ex.: Gmail API/Microsoft Graph) para identificar pendências de resposta.
+- Envio de respostas aprovadas via SMTP/API do mesmo provedor, mantendo o histórico da thread.
+
+<Note>
+  Todas as integrações acima alimentam o mesmo pipeline de orquestração descrito em [Arquitetura](/modulo-vendas/arquitetura) — a diferença entre canais está apenas na forma de leitura/envio, não na lógica de análise e aprovação.
+</Note>

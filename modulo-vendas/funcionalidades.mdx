@@ -1,0 +1,74 @@
+---
+title: 'Funcionalidades'
+description: 'As sete capacidades do agente de vendas, do diagnóstico de conversas ao envio automático'
+icon: 'list-check'
+---
+
+## 1. Análise de respostas de clientes (Chatwoot)
+
+Lê as conversas do Chatwoot (Brasil e Europa) e calcula, por conversa, agente e campanha de origem:
+
+- **Tempo de resposta** — primeira resposta e tempo médio entre mensagens.
+- **Interesse** — sinais no texto do cliente (perguntas sobre preço, prazo, disponibilidade) classificados pelo LLM.
+- **Taxa de conversão** — proporção de conversas que chegam a venda ou próxima etapa do funil.
+
+O resultado alimenta um painel por período/canal/agente e serve de insumo para as demais funcionalidades (correlação com mídia paga, avaliação de influencers, priorização de outbound).
+
+## 2. Monitoramento de conversas abertas e SLA
+
+<Steps>
+  <Step title="Verificação contínua">
+    O agente varre as conversas abertas no Chatwoot (Brasil e Europa) em intervalos curtos (poll ou webhook `conversation_updated`).
+  </Step>
+  <Step title="Alerta de SLA">
+    Se uma conversa passa de **1 hora** sem resposta do time, dispara um alerta para o responsável (WhatsApp interno, Slack ou e-mail, conforme a equipe).
+  </Step>
+  <Step title="Sugestão de resposta">
+    Junto com o alerta, o agente já gera uma sugestão de resposta com base no histórico da conversa, pronta para aprovação no [fluxo de aprovação](/modulo-vendas/fluxo-aprovacao) via WhatsApp.
+  </Step>
+</Steps>
+
+## 3. Correlação com Meta Ads e Google Ads
+
+Integra os resultados de **Meta Ads** e **Google Ads** (criativos, campanhas, gasto, CPL/CPA, cliques) e cruza com os dados de conversa do Chatwoot para responder: *qual criativo/campanha está trazendo leads que respondem rápido, demonstram interesse e convertem?*
+
+A saída é uma lista priorizada de **sugestões de melhoria**, por exemplo:
+
+- pausar ou reduzir orçamento de campanhas cujos leads têm baixa taxa de resposta ou conversão;
+- escalar criativos associados a conversas com alto interesse e boa conversão;
+- ajustar segmentação quando o padrão de conversa indica público fora do ICP (perfil de cliente ideal).
+
+## 4. Avaliação de desempenho de influencers
+
+Usa as mesmas conversas do Chatwoot, segmentadas por origem/UTM de influencer, para identificar quais parcerias geram leads que respondem, se engajam e convertem — e quais não geram. Para os que performam abaixo do esperado, o agente sugere ajustes de abordagem (call-to-action, oferta, tom de comunicação) antes de recomendar encerrar a parceria.
+
+## 5. Análise de campanhas de outbound
+
+Analisa os disparos de outbound (e-mail/WhatsApp frio) considerando:
+
+- **listas** utilizadas (origem, segmentação, qualidade);
+- **consultorias** envolvidas na prospecção;
+- **equipes de disparo** responsáveis por cada lista/campanha.
+
+Identifica quais combinações de lista + abordagem + equipe geram resposta e conversão, e recomenda ajustes de mensagem, segmentação ou redistribuição de listas entre equipes.
+
+## 6. Loop de resolução com aprovação humana
+
+<Steps>
+  <Step title="Ler">
+    O agente lê conversas e pendências (Chatwoot, WhatsApp, e-mail, outbound) continuamente.
+  </Step>
+  <Step title="Resolver com IA">
+    Gera uma resposta ou próxima ação usando o LLM (OLMo 3 32B) com o contexto completo da conversa.
+  </Step>
+  <Step title="Solicitar aprovação">
+    Envia a sugestão para aprovação humana antes de qualquer envio — ver [Fluxo de Aprovação](/modulo-vendas/fluxo-aprovacao).
+  </Step>
+  <Step title="Registrar resultado">
+    Registra o que foi aprovado, editado ou rejeitado, e o resultado obtido (respondeu, converteu, sem retorno), realimentando o ciclo seguinte.
+  </Step>
+</Steps>
+
+## 7. Respostas automáticas por e-mail e WhatsApp
+
+Depois de aprovada, a resposta é enviada automaticamente pelo canal de origem (e-mail ou WhatsApp), mantendo o histórico da conversa e atualizando o status no Chatwoot/CRM. O mesmo pipeline de aprovação vale para os dois canais, para que nenhuma mensagem saia sem revisão.
