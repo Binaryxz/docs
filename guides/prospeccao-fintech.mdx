@@ -1,0 +1,161 @@
+---
+title: 'Prospecção de Fintechs via CNPJ + IA'
+description: 'Pipeline para encontrar empresas de fintech no Brasil a partir da base de CNPJ, enriquecer com dados cadastrais e agente de IA, e exportar a planilha final'
+icon: 'magnifying-glass'
+---
+
+## Visão geral
+
+```mermaid
+flowchart TD
+    A[Base CNPJ<br/>Receita Federal via BigQuery] --> B[1. Filtro<br/>>=60% dos CNAEs alvo OU nome de fintech]
+    B --> C[2. Dados cadastrais<br/>telefone/e-mail da Receita + sócios + decisor]
+    C --> D[3. Agente de IA<br/>Gemini com busca nativa no Google]
+    D --> E[Planilha final<br/>dados da Receita + 5 colunas novas]
+```
+
+Os scripts completos deste guia estão em [`/scripts/prospeccao-fintech`](https://github.com/binaryxz/docs/tree/main/scripts/prospeccao-fintech) neste repositório.
+
+## Pré-requisitos
+
+- Projeto no Google Cloud com BigQuery habilitado (a base pública de CNPJ é consultada via o projeto `basedosdados`, sem custo de armazenamento, só de consulta).
+- Uma chave de API do Gemini (`GEMINI_API_KEY`) para a etapa 3.
+- Python 3.10+ com as dependências de `scripts/prospeccao-fintech/requirements.txt`.
+
+<Note>
+  Os dados de sócios (nome, CPF/CNPJ, cargo) são dados pessoais. Trate a planilha final como informação sensível: acesso restrito ao time comercial e descarte quando o lead não avançar, conforme a LGPD.
+</Note>
+
+## Etapa 1 — Filtro por CNAE na base de CNPJ
+
+Fonte: [Base dos Dados](https://basedosdados.org), que replica os arquivos públicos da Receita Federal (Empresas, Estabelecimentos, Sócios) como dataset público no BigQuery.
+
+### CNAEs alvo
+
+| Tipo | Código | Descrição |
+|---|---|---|
+| Principal | 74.90-1-04 | Intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários |
+| Secundário | 62.03-1-00 | Desenvolvimento e licenciamento de programas de computador não-customizáveis |
+| Secundário | 70.20-4-00 | Consultoria em gestão empresarial |
+| Secundário | 62.01-5-01 | Desenvolvimento de programas de computador sob encomenda |
+| Secundário | 82.99-7-99 | Outras atividades de serviços prestados às empresas |
+| Secundário | 62.09-1-00 | Suporte técnico, manutenção e outros serviços em TI |
+| Secundário | 66.19-3-99 | Outras atividades auxiliares dos serviços financeiros |
+
+### Regra do filtro
+
+Um CNPJ entra na lista quando:
+
+- **pelo menos 60% dos 7 CNAEs acima** (ou seja, 5 de 7) estão registrados nele, entre CNAE principal e secundários; **ou**
+- a razão social ou o nome fantasia contém "fintech".
+
+```sql filtro_cnae.sql
+DECLARE cnaes_alvo ARRAY<STRING> DEFAULT [
+  '7490104', '6203100', '7020400', '6201501', '8299799', '6209100', '6619399'
+];
+DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
+
+-- query completa em scripts/prospeccao-fintech/filtro_cnae.sql
+```
+
+Rode a query completa e salve o resultado em uma tabela (ex.: `meu_projeto.prospeccao.leads_filtrados`) — ela será a entrada da etapa 2.
+
+<Tip>
+  Ajuste o limiar (`limiar_percentual`) ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
+</Tip>
+
+## Etapa 2 — Dados cadastrais e decisor
+
+A própria base de Estabelecimentos já traz telefone (DDD + número, até 2 linhas) e e-mail corporativo declarado à Receita — sem custo ou API externa.
+
+Para sócios e decisor, cruzamos com a base de Sócios e priorizamos quem tem qualificação de administração/direção (Administrador, Sócio-Administrador, Diretor, Presidente); na ausência de um cargo desses, usamos o sócio mais antigo cadastrado.
+
+Veja `scripts/prospeccao-fintech/socios_decisor.sql`.
+
+## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
+
+Existem duas implementações, escolha conforme seu acesso:
+
+### Opção A — Grounding nativo do Gemini (mais simples, exige billing)
+
+Usa a ferramenta `google_search` embutida do Gemini: uma chamada, o próprio Gemini decide pesquisar e responde já com as fontes. Mais simples, mas a Google exige uma conta de faturamento vinculada ao projeto para usar essa ferramenta (mesmo que o uso fique dentro da faixa gratuita).
+
+```python enrich_leads.py
+response = client.models.generate_content(
+    model="gemini-flash-latest",
+    contents=prompt,
+    config=types.GenerateContentConfig(
+        tools=[types.Tool(google_search=types.GoogleSearch())],
+        response_mime_type="application/json",
+        response_schema=RESPONSE_SCHEMA,
+    ),
+)
+# response.candidates[0].grounding_metadata.grounding_chunks -> fontes usadas
+```
+
+Script completo: `scripts/prospeccao-fintech/enrich_leads.py`.
+
+```bash
+export GEMINI_API_KEY="sua-chave"
+pip install -r scripts/prospeccao-fintech/requirements.txt
+python scripts/prospeccao-fintech/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
+```
+
+### Opção B — Agente com busca ativa (sem billing no Gemini, precisa de rede aberta)
+
+Em vez de um grounding de busca única, o Gemini age como um **agente**: recebe duas ferramentas via function calling —
+
+- `buscar_web(query)` → pesquisa no [Brave Search API](https://brave.com/search/api/) (plano gratuito, sem cartão) e devolve título/URL/resumo dos resultados;
+- `registrar_resultado(...)` → finaliza a investigação desta empresa com os campos estruturados.
+
+O próprio modelo decide **quantas buscas fazer e com quais termos** (ex.: primeiro `"<empresa> <cidade>"` para achar o site, depois `"<empresa> telefone"` ou `"<empresa> whatsapp"` para confirmar contato), dentro de um orçamento máximo de buscas por empresa — mais próximo de como um analista pesquisaria manualmente do que uma única query.
+
+```python agentic_enrich.py
+TOOLS = [types.Tool(function_declarations=[
+    types.FunctionDeclaration(name="buscar_web", ...),
+    types.FunctionDeclaration(name="registrar_resultado", ...),
+])]
+
+for _ in range(max_searches + 2):
+    response = client.models.generate_content(
+        model="gemini-flash-latest",
+        contents=contents,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, tools=TOOLS),
+    )
+    # se o modelo chamou buscar_web -> roda brave_search() e devolve o resultado
+    # se chamou registrar_resultado -> encerra e retorna os campos estruturados
+```
+
+Script completo: `scripts/prospeccao-fintech/agentic_enrich.py`. Funciona com qualquer CSV — usa todas as colunas preenchidas do lead como contexto de busca, então serve tanto para a saída da etapa 1-2 (`cnpj, razao_social, ...`) quanto para outras bases de empresas.
+
+<Warning>
+  O Brave Search e o `api.deepseek.com` (caso opte por trocar o modelo de extração) não são alcançáveis em ambientes de rede restrita/sandbox — só domínios `googleapis.com` costumam passar por políticas de rede corporativas. Rode esta opção em um ambiente com acesso normal à internet.
+</Warning>
+
+```bash
+export GEMINI_API_KEY="sua-chave"      # grátis, sem billing (não usa grounding nativo)
+export BRAVE_API_KEY="sua-chave-brave" # plano gratuito, sem cartão
+pip install -r scripts/prospeccao-fintech/requirements.txt
+python scripts/prospeccao-fintech/agentic_enrich.py leads_com_socios.csv leads_enriquecidos.csv
+```
+
+Ambas as opções gravam incrementalmente (`flush` a cada linha) e pulam leads já processados se você rodar de novo em cima do mesmo arquivo de saída — uma falha no meio não perde o progresso.
+
+## Planilha final
+
+O último script junta tudo e adiciona as 5 colunas novas:
+
+| Coluna nova | Descrição |
+|---|---|
+| `site_oficial` | URL do site oficial encontrado pela IA |
+| `telefone_comercial_ia` | Telefone comercial encontrado na web (complementa o da Receita) |
+| `whatsapp_publico` | Número de WhatsApp comercial público |
+| `fonte_ia` | URLs usadas pela IA para confirmar os dados acima |
+| `confianca_ia` | `alta` / `media` / `baixa` |
+
+```bash
+python scripts/prospeccao-fintech/build_planilha_final.py \
+  leads_com_socios.csv leads_enriquecidos.csv planilha_final.xlsx
+```
+
+O resultado (`planilha_final.xlsx`) tem uma linha por CNPJ, com todos os dados cadastrais da Receita + sócios/decisor + as 5 colunas da IA acima.
