@@ -13,6 +13,7 @@ para pesquisar no Google (grounding nativo, sem scraping manual) e devolver:
 Uso:
     export GEMINI_API_KEY="..."
     python enrich_leads.py leads_filtrados.csv leads_enriquecidos.csv
+    python enrich_leads.py leads.csv saida.csv --pular-com-contato telefone_1,correio_eletronico
 
 Entrada esperada (CSV): colunas cnpj, razao_social, nome_fantasia, uf, municipio
 (o que sai de join_leads_socios.sql). As colunas nome_decisor e descricao, se
@@ -167,7 +168,7 @@ def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
     )
 
 
-def main(input_path: str, output_path: str) -> None:
+def main(input_path: str, output_path: str, pular_se_preenchido: list[str] | None = None) -> None:
     client = genai.Client()  # lê GEMINI_API_KEY do ambiente
 
     with open(input_path, newline="", encoding="utf-8") as f_in:
@@ -204,6 +205,18 @@ def main(input_path: str, output_path: str) -> None:
             cnpj = lead.get("cnpj", "")
             if cnpj and cnpj in done_cnpjs:
                 continue
+
+            if pular_se_preenchido and any(lead.get(campo, "").strip() for campo in pular_se_preenchido):
+                print(f"[{i}/{len(leads)}] pulando {lead.get('razao_social')} (já tem contato na base)...", file=sys.stderr)
+                pulado = Enrichment(
+                    cnpj=cnpj, site_oficial="", telefone_comercial_ia="", whatsapp_publico="",
+                    linkedin_decisor="", telefone_decisor_ia="", fonte_ia="",
+                    confianca_ia="pulado_ja_tinha_contato",
+                )
+                writer.writerow({**lead, **asdict(pulado)})
+                f_out.flush()
+                continue
+
             print(f"[{i}/{len(leads)}] pesquisando {lead.get('razao_social')}...", file=sys.stderr)
             enrichment = enrich_one(client, lead)
             writer.writerow({**lead, **asdict(enrichment)})
@@ -212,7 +225,23 @@ def main(input_path: str, output_path: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python enrich_leads.py <entrada.csv> <saida.csv>", file=sys.stderr)
-        sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Enriquece leads com site/telefone/WhatsApp/decisor via Gemini (grounding nativo).")
+    parser.add_argument("entrada", help="CSV de entrada (leads_com_socios.csv)")
+    parser.add_argument("saida", help="CSV de saída (retomável: roda de novo em cima do mesmo arquivo)")
+    parser.add_argument(
+        "--pular-com-contato",
+        metavar="COL1,COL2,...",
+        default=None,
+        help=(
+            "Nomes de colunas do CSV de entrada (separados por vírgula) que, se já "
+            "preenchidas, fazem o lead ser pulado sem gastar chamada de API — "
+            "reduz custo quando a base já traz contato pra boa parte dos leads. "
+            "Ex.: --pular-com-contato telefone_1,correio_eletronico"
+        ),
+    )
+    args = parser.parse_args()
+
+    pular = [c.strip() for c in args.pular_com_contato.split(",")] if args.pular_com_contato else None
+    main(args.entrada, args.saida, pular_se_preenchido=pular)

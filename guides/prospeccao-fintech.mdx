@@ -64,6 +64,20 @@ Rode a query completa e salve o resultado em uma tabela (ex.: `meu_projeto.prosp
   Ajuste o limiar (`limiar_percentual`) ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
 </Tip>
 
+### Alternativa sem BigQuery: `filtrar_cnpjs_local.py`
+
+Se você não tem (ou não quer usar) um projeto Google Cloud, `scripts/prospeccao-fintech/filtrar_cnpjs_local.py` faz o mesmo filtro (etapas 1 e 2 juntas) rodando localmente sobre os [arquivos abertos de CNPJ da Receita Federal](https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/) — sem custo de API, só tempo de CPU. Além do match por CNAE, também casa uma lista mais ampla de palavras-chave (pagamento, pay, bank, banco, crédito, investimento, etc. — editável em `PALAVRAS_CHAVE_FINTECH` no topo do script) contra razão social e nome fantasia, não só a palavra "fintech" literal.
+
+```bash
+python scripts/prospeccao-fintech/filtrar_cnpjs_local.py \
+  --estabelecimentos "dados/*ESTABELE*" \
+  --empresas "dados/*EMPRECSV*" \
+  --socios "dados/*SOCIOCSV*" \
+  --saida leads_com_socios.csv
+```
+
+Aceita tanto os arquivos originais da Receita (sem cabeçalho, `;`, Latin-1) quanto CSVs já com cabeçalho — detecta automaticamente. Processa por streaming (linha a linha, sem carregar os arquivos inteiros em memória), então funciona mesmo sobre a base nacional completa (dezenas de milhões de linhas), mas pode levar de minutos a horas dependendo do volume e do hardware.
+
 ## Etapa 2 — Dados cadastrais e decisor
 
 A própria base de Estabelecimentos já traz telefone (DDD + número, até 2 linhas) e e-mail corporativo declarado à Receita — sem custo ou API externa.
@@ -97,6 +111,8 @@ response = client.models.generate_content(
 
 Se o CSV de entrada tiver a coluna `nome_decisor` (vinda de `join_leads_socios.sql`), ela é passada como contexto extra na busca — ajuda a desambiguar empresas com nome genérico, mas não é obrigatória.
 
+Também tenta achar um contato profissional do decisor (LinkedIn, e telefone só se estiver publicamente associado a essa pessoa) quando `nome_decisor` está preenchido.
+
 Script completo: `scripts/prospeccao-fintech/enrich_leads.py`.
 
 ```bash
@@ -104,6 +120,15 @@ export GEMINI_API_KEY="sua-chave"
 pip install -r scripts/prospeccao-fintech/requirements.txt
 python scripts/prospeccao-fintech/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
 ```
+
+<Tip>
+  Se a base de entrada já traz telefone/e-mail pra boa parte dos leads (comum
+  em bases de terceiros, diferente da saída "crua" da Receita), use
+  `--pular-com-contato telefone_1,correio_eletronico` (troque pelos nomes das
+  colunas relevantes) para pular esses leads sem gastar chamada de API —
+  reduz custo quando só uma fração da base realmente precisa de busca. Mesma
+  flag disponível em `agentic_enrich.py`.
+</Tip>
 
 ### Opção B — Agente com busca ativa (sem billing no Gemini, precisa de rede aberta)
 

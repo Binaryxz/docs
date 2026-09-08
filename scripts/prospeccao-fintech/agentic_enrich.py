@@ -291,7 +291,12 @@ def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searche
     )
 
 
-def main(input_path: str, output_path: str, max_searches: int = MAX_SEARCHES_PADRAO) -> None:
+def main(
+    input_path: str,
+    output_path: str,
+    max_searches: int = MAX_SEARCHES_PADRAO,
+    pular_se_preenchido: list[str] | None = None,
+) -> None:
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     brave_api_key = os.environ["BRAVE_API_KEY"]
 
@@ -322,6 +327,18 @@ def main(input_path: str, output_path: str, max_searches: int = MAX_SEARCHES_PAD
             if current_id in done_ids:
                 continue
             nome_exibicao = lead.get("nome") or lead.get("razao_social") or current_id
+
+            if pular_se_preenchido and any(lead.get(campo, "").strip() for campo in pular_se_preenchido):
+                print(f"[{i}/{len(leads)}] pulando {nome_exibicao} (já tem contato na base)...", file=sys.stderr, flush=True)
+                pulado = Enrichment(
+                    lead_id=current_id, site_oficial="", telefone_comercial_ia="",
+                    whatsapp_publico="", fonte_ia="", confianca_ia="pulado_ja_tinha_contato",
+                    buscas_realizadas="",
+                )
+                writer.writerow(asdict(pulado))
+                f_out.flush()
+                continue
+
             print(f"[{i}/{len(leads)}] investigando {nome_exibicao}...", file=sys.stderr, flush=True)
             enrichment = enrich_one(client, brave_api_key, lead, max_searches)
             writer.writerow(asdict(enrichment))
@@ -332,8 +349,19 @@ def main(input_path: str, output_path: str, max_searches: int = MAX_SEARCHES_PAD
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (3, 4):
-        print("Uso: python agentic_enrich.py <entrada.csv> <saida.csv> [max_buscas_por_empresa]", file=sys.stderr)
-        sys.exit(1)
-    max_searches = int(sys.argv[3]) if len(sys.argv) == 4 else MAX_SEARCHES_PADRAO
-    main(sys.argv[1], sys.argv[2], max_searches)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Enriquece leads com site/telefone/WhatsApp via agente de busca ativa (Brave Search + Gemini function calling).")
+    parser.add_argument("entrada", help="CSV de entrada")
+    parser.add_argument("saida", help="CSV de saída (retomável: pula ids já presentes)")
+    parser.add_argument("max_buscas", nargs="?", type=int, default=MAX_SEARCHES_PADRAO, help=f"Orçamento de buscas por empresa (padrão {MAX_SEARCHES_PADRAO})")
+    parser.add_argument(
+        "--pular-com-contato",
+        metavar="COL1,COL2,...",
+        default=None,
+        help="Colunas do CSV de entrada que, se já preenchidas, pulam o lead sem gastar chamadas (mesmo uso do enrich_leads.py).",
+    )
+    args = parser.parse_args()
+
+    pular = [c.strip() for c in args.pular_com_contato.split(",")] if args.pular_com_contato else None
+    main(args.entrada, args.saida, args.max_buscas, pular_se_preenchido=pular)
