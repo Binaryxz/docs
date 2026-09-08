@@ -44,6 +44,16 @@ MAX_SEARCHES_PADRAO = 5
 SECONDS_BETWEEN_LEADS = 1.0
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
+# O nível gratuito do Gemini limita a poucas requisições por minuto por modelo
+# (na prática, ~5 RPM em modelos flash no momento em que este script foi
+# escrito — pode mudar). Cada chamada do agente (busca ou decisão final) é
+# uma requisição, então espaçamos as chamadas pra não estourar o limite e
+# tratar 429 com o retryDelay real que a API devolve, em vez de um backoff
+# arbitrário que desperdiça tentativas.
+SECONDS_BETWEEN_API_CALLS = 13.0
+DEFAULT_RETRY_DELAY = 20.0
+MAX_RETRIES_TRANSIENTES = 6
+
 TOOLS = [
     types.Tool(
         function_declarations=[
@@ -157,15 +167,22 @@ def build_lead_context(lead: dict) -> str:
     return "\n".join(linhas) if linhas else "(nenhum dado adicional disponível)"
 
 
-def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searches: int) -> Enrichment:
-    lead_id = lead.get("lead_id") or lead.get("cnpj") or ""
-    prompt = f"Dados conhecidos desta empresa brasileira:\n{build_lead_context(lead)}\n\nInvestigue e registre o resultado."
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
-    buscas_feitas: list[str] = []
+def _extrair_retry_delay(exc: Exception) -> float:
+    """Tenta ler o retryDelay que a API manda no erro 429; senão usa um default."""
+    import re
 
-    for _ in range(max_searches + 2):  # +2 de folga pra permitir o registrar_resultado final
+    m = re.search(r"retryDelay['\"]?\s*:\s*['\"]?(\d+)", str(exc))
+    if m:
+        return float(m.group(1)) + 1.0  # +1s de folga
+    return DEFAULT_RETRY_DELAY
+
+
+def _generate_com_retry(client: genai.Client, contents, max_searches: int):
+    """Chama generate_content tratando 429 (rate limit) e 503 (sobrecarga) com
+    o tempo de espera certo, sem consumir o orçamento de buscas do agente."""
+    for tentativa in range(1, MAX_RETRIES_TRANSIENTES + 1):
         try:
-            response = client.models.generate_content(
+            return client.models.generate_content(
                 model=MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
@@ -174,16 +191,53 @@ def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searche
                 ),
             )
         except Exception as exc:
-            print(f"[aviso] erro de API em lead_id={lead_id}: {exc}", file=sys.stderr)
-            time.sleep(3)
-            continue
+            texto_erro = str(exc)
+            if "429" in texto_erro:
+                espera = _extrair_retry_delay(exc)
+            elif "503" in texto_erro or "UNAVAILABLE" in texto_erro:
+                espera = 5.0 * tentativa
+            else:
+                raise
+            print(f"[aviso] erro transiente ({tentativa}/{MAX_RETRIES_TRANSIENTES}), esperando {espera:.0f}s: {texto_erro[:150]}", file=sys.stderr)
+            time.sleep(espera)
+    raise RuntimeError("esgotou as tentativas após erros transientes repetidos")
+
+
+def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searches: int) -> Enrichment:
+    lead_id = lead.get("lead_id") or lead.get("cnpj") or ""
+    prompt = f"Dados conhecidos desta empresa brasileira:\n{build_lead_context(lead)}\n\nInvestigue e registre o resultado."
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+    buscas_feitas: list[str] = []
+
+    ja_pediu_para_finalizar = False
+    for _ in range(max_searches + 3):  # +3 de folga: registrar_resultado final + 1 empurrão se necessário
+        time.sleep(SECONDS_BETWEEN_API_CALLS)
+        try:
+            response = _generate_com_retry(client, contents, max_searches)
+        except RuntimeError as exc:
+            print(f"[aviso] desistindo de lead_id={lead_id}: {exc}", file=sys.stderr)
+            break
 
         candidate = response.candidates[0]
         contents.append(candidate.content)
 
         function_calls = [p.function_call for p in candidate.content.parts if p.function_call]
         if not function_calls:
-            break
+            if ja_pediu_para_finalizar:
+                break
+            # o modelo respondeu em texto livre em vez de chamar uma função
+            # (ex.: concluiu que não vai achar mais nada) — dá uma última
+            # chance de registrar o que já apurou em vez de descartar tudo
+            ja_pediu_para_finalizar = True
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(
+                        text="Finalize agora chamando registrar_resultado com o que você já apurou (campos vazios para o que não encontrou)."
+                    )],
+                )
+            )
+            continue
 
         final_args = None
         response_parts = []
@@ -215,6 +269,14 @@ def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searche
                 confianca_ia=final_args.get("confianca_ia", "baixa"),
                 buscas_realizadas=" | ".join(buscas_feitas),
             )
+
+        if len(buscas_feitas) >= max_searches:
+            # orçamento de buscas esgotado: força a finalização em vez de
+            # deixar o modelo tentar mais buscar_web (que só voltaria vazio)
+            response_parts.append(types.Part.from_text(
+                text="Você já usou todas as buscas disponíveis. Chame registrar_resultado agora com o que apurou."
+            ))
+            ja_pediu_para_finalizar = True
 
         contents.append(types.Content(role="user", parts=response_parts))
 
