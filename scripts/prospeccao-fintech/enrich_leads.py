@@ -27,7 +27,7 @@ from dataclasses import dataclass, asdict
 from google import genai
 from google.genai import types
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-flash-latest"
 MAX_RETRIES = 3
 SECONDS_BETWEEN_CALLS = 1.0  # respeita rate limit da API
 
