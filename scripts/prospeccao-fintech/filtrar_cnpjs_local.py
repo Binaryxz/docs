@@ -9,9 +9,12 @@ baixa os arquivos abertos da Receita Federal (https://dados.gov.br, ou
 https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/) e roda
 este script sobre eles.
 
-Aceita dois formatos de entrada (detecta automaticamente por arquivo):
-  - Arquivos originais da Receita Federal: sem cabeçalho, separados por ';',
-    codificação Latin-1, divididos em várias partes (Y0..Y9 ou similar).
+Aceita três formatos de entrada (detecta automaticamente por arquivo):
+  - Arquivos .zip originais da Receita Federal, exatamente como distribuídos
+    (ex.: Empresas0.zip) — lidos por streaming direto de dentro do zip, sem
+    extrair pra disco.
+  - Os mesmos arquivos já descompactados: sem cabeçalho, separados por ';',
+    codificação Latin-1, divididos em várias partes (0..9).
   - CSVs com cabeçalho (ex.: exportados do basedosdados ou do BigQuery),
     separados por ',' ou ';', UTF-8.
 
@@ -46,8 +49,10 @@ tendem a ser mais rápidos.
 import argparse
 import csv
 import glob
+import io
 import sys
 import unicodedata
+import zipfile
 from typing import Iterable, Iterator
 
 CNAES_ALVO = {
@@ -160,16 +165,17 @@ def percentual_cnae(principal: str, secundaria: str) -> tuple[float, int]:
     return qtd / len(CNAES_ALVO), qtd
 
 
-def abrir_linhas(caminho: str, campos_padrao: list[str]) -> Iterator[dict]:
-    """Detecta encoding, delimitador e presença de cabeçalho, e devolve
-    um iterador de dicts com nomes de coluna padronizados (CAMPOS_*)."""
+def _linhas_de_bufferedreader(f_bin, campos_padrao: list[str]) -> Iterator[dict]:
+    """Recebe um stream binário (arquivo aberto ou membro de zip), detecta
+    encoding/delimitador/cabeçalho pela primeira linha, e devolve um
+    iterador de dicts com nomes de coluna padronizados (CAMPOS_*)."""
+    amostra = f_bin.readline()
     encoding = "utf-8-sig"
-    with open(caminho, "rb") as f_bin:
-        amostra = f_bin.readline()
     try:
         amostra.decode("utf-8")
     except UnicodeDecodeError:
         encoding = "latin-1"
+    f_bin.seek(0)
 
     primeira_linha = amostra.decode(encoding, errors="replace")
     delimitador = ";" if primeira_linha.count(";") >= primeira_linha.count(",") else ","
@@ -177,12 +183,26 @@ def abrir_linhas(caminho: str, campos_padrao: list[str]) -> Iterator[dict]:
         campo in primeira_linha for campo in ("cnpj_basico", "razao_social", "nome_socio_razao_social")
     )
 
-    with open(caminho, encoding=encoding, newline="") as f:
-        if tem_cabecalho:
-            reader = csv.DictReader(f, delimiter=delimitador)
-        else:
-            reader = csv.DictReader(f, fieldnames=campos_padrao, delimiter=delimitador)
-        yield from reader
+    texto = io.TextIOWrapper(f_bin, encoding=encoding, newline="")
+    if tem_cabecalho:
+        reader = csv.DictReader(texto, delimiter=delimitador)
+    else:
+        reader = csv.DictReader(texto, fieldnames=campos_padrao, delimiter=delimitador)
+    yield from reader
+
+
+def abrir_linhas(caminho: str, campos_padrao: list[str]) -> Iterator[dict]:
+    """Abre um arquivo de dados (.zip original da Receita, ou CSV já
+    descompactado) e devolve um iterador de dicts."""
+    if caminho.lower().endswith(".zip"):
+        with zipfile.ZipFile(caminho) as z:
+            membros = [n for n in z.namelist() if not n.endswith("/")]
+            for nome in membros:
+                with z.open(nome) as f_bin:
+                    yield from _linhas_de_bufferedreader(f_bin, campos_padrao)
+    else:
+        with open(caminho, "rb") as f_bin:
+            yield from _linhas_de_bufferedreader(f_bin, campos_padrao)
 
 
 def escanear_estabelecimentos(
