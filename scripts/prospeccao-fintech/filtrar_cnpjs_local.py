@@ -68,6 +68,15 @@ LIMIAR_PADRAO = 0.6
 
 # Editável: termos comuns em razão social / nome fantasia de fintechs
 # brasileiras. Comparação é feita sem acento e em minúsculas (ver normaliza()).
+#
+# Termos como "banco", "credito", "financeira", "investimento" e "corretora"
+# foram DELIBERADAMENTE excluídos: testados contra a base real, cada um
+# sozinho gerava milhares de falsos positivos (fundos de investimento,
+# holdings "XYZ Investimentos Ltda", corretoras de seguros tradicionais,
+# consultorias financeiras) que não são fintechs. Prefira uma lista mais
+# curta e precisa — o filtro por CNAE já cobre a maior parte do universo
+# real; a lista de palavras-chave é só um complemento para pegar fintechs
+# óbvias pelo nome que não bateram o limiar de CNAE.
 PALAVRAS_CHAVE_FINTECH = [
     "fintech",
     "pagamento",
@@ -75,21 +84,8 @@ PALAVRAS_CHAVE_FINTECH = [
     "pay",
     "payment",
     "payments",
-    "bank",
-    "banco",
-    "bancaria",
-    "bancario",
-    "financeira",
-    "financeiro",
     "solucoes financeiras",
     "solucao financeira",
-    "credito",
-    "emprestimo",
-    "emprestimos",
-    "investimento",
-    "investimentos",
-    "corretora",
-    "cambio",
     "carteira digital",
     "wallet",
     "meios de pagamento",
