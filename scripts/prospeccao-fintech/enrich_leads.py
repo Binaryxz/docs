@@ -241,7 +241,20 @@ if __name__ == "__main__":
             "Ex.: --pular-com-contato telefone_1,correio_eletronico"
         ),
     )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=None,
+        help=(
+            f"Segundos entre chamadas (padrão {SECONDS_BETWEEN_CALLS}). Aumente se a conta "
+            "bater 'spend-based rate limit' (429) — esse limite é por ritmo de gasto, não só "
+            "por crédito total, então ir mais devagar evita o erro."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.delay is not None:
+        SECONDS_BETWEEN_CALLS = args.delay
 
     pular = [c.strip() for c in args.pular_com_contato.split(",")] if args.pular_com_contato else None
     main(args.entrada, args.saida, pular_se_preenchido=pular)
