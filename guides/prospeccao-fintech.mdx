@@ -72,6 +72,8 @@ Para sócios e decisor, cruzamos com a base de Sócios e priorizamos quem tem qu
 
 Veja `scripts/prospeccao-fintech/socios_decisor.sql`.
 
+Depois de salvar os resultados de `filtro_cnae.sql` e `socios_decisor.sql` em tabelas, junte os dois com `scripts/prospeccao-fintech/join_leads_socios.sql` (LEFT JOIN por `cnpj_basico`) e exporte o resultado como `leads_com_socios.csv` — é esse arquivo que alimenta a etapa 3.
+
 ## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
 
 Existem duas implementações, escolha conforme seu acesso:
@@ -92,6 +94,8 @@ response = client.models.generate_content(
 )
 # response.candidates[0].grounding_metadata.grounding_chunks -> fontes usadas
 ```
+
+Se o CSV de entrada tiver a coluna `nome_decisor` (vinda de `join_leads_socios.sql`), ela é passada como contexto extra na busca — ajuda a desambiguar empresas com nome genérico, mas não é obrigatória.
 
 Script completo: `scripts/prospeccao-fintech/enrich_leads.py`.
 

@@ -13,7 +13,9 @@ Uso:
     python enrich_leads.py leads_filtrados.csv leads_enriquecidos.csv
 
 Entrada esperada (CSV): colunas cnpj, razao_social, nome_fantasia, uf, municipio
-(exatamente o que sai de filtro_cnae.sql + socios_decisor.sql).
+(o que sai de join_leads_socios.sql). A coluna nome_decisor, se presente, é
+usada apenas como contexto extra de busca (ajuda a desambiguar empresas com
+nome genérico) e não é obrigatória.
 """
 
 import csv
@@ -50,7 +52,7 @@ Empresa: {razao_social}
 Nome fantasia: {nome_fantasia}
 CNPJ: {cnpj}
 Localização: {municipio}/{uf}
-
+{decisor_linha}
 Regras:
 - Não invente nada. Se não encontrar algum dado com uma fonte pública confiável, deixe o campo vazio ("").
 - "confianca_ia" = "alta" se o site oficial bate com a razão social/CNPJ; "media" se é plausível mas não 100% confirmado; "baixa" se os dados são incertos.
@@ -84,12 +86,16 @@ def extract_sources(response) -> str:
 
 
 def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
+    nome_decisor = lead.get("nome_decisor", "").strip()
+    decisor_linha = f"Possível decisor (sócio-administrador/diretor): {nome_decisor}\n" if nome_decisor else ""
+
     prompt = PROMPT_TEMPLATE.format(
         razao_social=lead.get("razao_social", ""),
         nome_fantasia=lead.get("nome_fantasia", ""),
         cnpj=lead.get("cnpj", ""),
         municipio=lead.get("municipio", ""),
         uf=lead.get("uf", ""),
+        decisor_linha=decisor_linha,
     )
 
     last_error = None
