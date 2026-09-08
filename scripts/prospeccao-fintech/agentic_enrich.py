@@ -40,7 +40,7 @@ from google import genai
 from google.genai import types
 
 MODEL = "gemini-flash-latest"
-MAX_SEARCHES_PADRAO = 5
+MAX_SEARCHES_PADRAO = 7  # empresa + pelo menos 2 buscas dedicadas ao decisor, quando houver um
 SECONDS_BETWEEN_LEADS = 1.0
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
@@ -84,13 +84,29 @@ TOOLS = [
                         "site_oficial": {"type": "STRING", "description": "URL do site oficial, ou vazio"},
                         "telefone_comercial_ia": {"type": "STRING", "description": "Telefone comercial público, ou vazio"},
                         "whatsapp_publico": {"type": "STRING", "description": "WhatsApp comercial público, ou vazio"},
+                        "linkedin_decisor": {
+                            "type": "STRING",
+                            "description": "URL do perfil do LinkedIn do sócio/decisor indicado no contexto, ou vazio se não houver decisor ou não achar",
+                        },
+                        "telefone_decisor_ia": {
+                            "type": "STRING",
+                            "description": "Telefone/WhatsApp pessoal do decisor, SÓ se achar uma fonte pública que associe explicitamente esse número a essa pessoa (raro); caso contrário vazio",
+                        },
                         "fonte_ia": {
                             "type": "STRING",
                             "description": "URLs reais (das buscas que você fez) que confirmam os dados acima, separadas por ' | '",
                         },
                         "confianca_ia": {"type": "STRING", "enum": ["alta", "media", "baixa"]},
                     },
-                    "required": ["site_oficial", "telefone_comercial_ia", "whatsapp_publico", "fonte_ia", "confianca_ia"],
+                    "required": [
+                        "site_oficial",
+                        "telefone_comercial_ia",
+                        "whatsapp_publico",
+                        "linkedin_decisor",
+                        "telefone_decisor_ia",
+                        "fonte_ia",
+                        "confianca_ia",
+                    ],
                 },
             ),
         ]
@@ -100,28 +116,44 @@ TOOLS = [
 SYSTEM_INSTRUCTION = """\
 Você é um agente de pesquisa que investiga empresas brasileiras usando a \
 ferramenta buscar_web (Brave Search). Seu objetivo é achar, se existirem \
-publicamente: site oficial, telefone comercial público e WhatsApp comercial \
-público.
+publicamente: site oficial, telefone comercial público, WhatsApp comercial \
+público e, se um sócio/decisor foi indicado no contexto da empresa, o \
+LinkedIn (e, mais raramente, telefone pessoal) dessa pessoa.
 
 Estratégia recomendada:
 1. Comece buscando o nome da empresa + cidade/estado pra achar o site oficial.
 2. Se achar o site (ou uma rede social oficial), faça buscas mais específicas \
-   pra confirmar telefone/WhatsApp (ex.: "<nome> contato telefone", \
-   "<nome> whatsapp comercial").
-3. Se depois de várias tentativas razoáveis não achar nada confiável, pare \
+   pra confirmar telefone/WhatsApp (ex.: "<nome da empresa> contato telefone", \
+   "<nome da empresa> whatsapp comercial").
+3. Se o contexto trouxer um nome de sócio/decisor, dedique PELO MENOS 2 \
+   buscas específicas a essa PESSOA (não à empresa): "<nome do decisor> \
+   linkedin", "<nome do decisor> <nome da empresa>". O LinkedIn é a fonte \
+   mais confiável e mais provável de existir — priorize achar o perfil. \
+   Telefone pessoal é raro de ser público; só registre se uma fonte \
+   associar explicitamente aquele número a essa pessoa (ex.: assinatura de \
+   e-mail publicada, perfil profissional com contato, matéria de imprensa) \
+   — nunca infira ou reutilize o telefone comercial da empresa como se \
+   fosse o telefone pessoal do decisor.
+4. Se depois de várias tentativas razoáveis não achar nada confiável, pare \
    e registre os campos vazios com confiança "baixa" — não fique insistindo \
    à toa.
-4. A empresa pode ter fechado ou mudado de nome desde os dados que você tem. \
+5. A empresa pode ter fechado ou mudado de nome desde os dados que você tem. \
    Se as buscas sugerirem isso, registre confiança "baixa".
 
 Regras inegociáveis:
-- NUNCA invente site, telefone ou WhatsApp. Se não achou uma fonte pública \
-  real, deixe o campo vazio ("").
+- NUNCA invente site, telefone, WhatsApp ou LinkedIn. Se não achou uma fonte \
+  pública real, deixe o campo vazio ("").
+- NUNCA copie o telefone/WhatsApp comercial da empresa para o campo de \
+  telefone do decisor — são coisas diferentes, mesmo que pertençam à mesma \
+  pessoa em empresas pequenas; só preencha o campo do decisor com um número \
+  explicitamente atribuído a ele/ela como pessoa.
+- Se nenhum decisor foi indicado no contexto, deixe linkedin_decisor e \
+  telefone_decisor_ia vazios.
 - Em fonte_ia, cite APENAS URLs que realmente vieram dos resultados de \
   buscar_web nesta investigação.
 - Você tem no máximo {max_searches} chamadas de buscar_web para esta empresa. \
   Use-as com inteligência (termos diferentes a cada busca, não repita a \
-  mesma query).
+  mesma query, e reserve parte do orçamento para o decisor quando houver um).
 - Quando terminar, sua ÚLTIMA ação deve ser chamar registrar_resultado.
 """
 
@@ -132,6 +164,8 @@ class Enrichment:
     site_oficial: str
     telefone_comercial_ia: str
     whatsapp_publico: str
+    linkedin_decisor: str
+    telefone_decisor_ia: str
     fonte_ia: str
     confianca_ia: str
     buscas_realizadas: str
@@ -265,6 +299,8 @@ def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searche
                 site_oficial=final_args.get("site_oficial", ""),
                 telefone_comercial_ia=final_args.get("telefone_comercial_ia", ""),
                 whatsapp_publico=final_args.get("whatsapp_publico", ""),
+                linkedin_decisor=final_args.get("linkedin_decisor", ""),
+                telefone_decisor_ia=final_args.get("telefone_decisor_ia", ""),
                 fonte_ia=final_args.get("fonte_ia", ""),
                 confianca_ia=final_args.get("confianca_ia", "baixa"),
                 buscas_realizadas=" | ".join(buscas_feitas),
@@ -285,6 +321,8 @@ def enrich_one(client: genai.Client, brave_api_key: str, lead: dict, max_searche
         site_oficial="",
         telefone_comercial_ia="",
         whatsapp_publico="",
+        linkedin_decisor="",
+        telefone_decisor_ia="",
         fonte_ia="",
         confianca_ia="baixa",
         buscas_realizadas=" | ".join(buscas_feitas),
@@ -314,7 +352,7 @@ def main(
             for row in csv.DictReader(f_prev):
                 done_ids.add(row["lead_id"])
 
-    fieldnames = ["lead_id", "site_oficial", "telefone_comercial_ia", "whatsapp_publico", "fonte_ia", "confianca_ia", "buscas_realizadas"]
+    fieldnames = ["lead_id", "site_oficial", "telefone_comercial_ia", "whatsapp_publico", "linkedin_decisor", "telefone_decisor_ia", "fonte_ia", "confianca_ia", "buscas_realizadas"]
     write_header = not os.path.exists(output_path)
 
     with open(output_path, "a", newline="", encoding="utf-8") as f_out:
@@ -332,7 +370,8 @@ def main(
                 print(f"[{i}/{len(leads)}] pulando {nome_exibicao} (já tem contato na base)...", file=sys.stderr, flush=True)
                 pulado = Enrichment(
                     lead_id=current_id, site_oficial="", telefone_comercial_ia="",
-                    whatsapp_publico="", fonte_ia="", confianca_ia="pulado_ja_tinha_contato",
+                    whatsapp_publico="", linkedin_decisor="", telefone_decisor_ia="",
+                    fonte_ia="", confianca_ia="pulado_ja_tinha_contato",
                     buscas_realizadas="",
                 )
                 writer.writerow(asdict(pulado))
