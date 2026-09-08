@@ -72,18 +72,17 @@ Para sócios e decisor, cruzamos com a base de Sócios e priorizamos quem tem qu
 
 Veja `scripts/prospeccao-fintech/socios_decisor.sql`.
 
-## Etapa 3 — Agente de IA (pesquisa + fonte)
+## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
 
-Para cada lead que sai da etapa 2, o agente:
+Existem duas implementações, escolha conforme seu acesso:
 
-1. Pede ao **Gemini com grounding de busca nativa** (`google_search` tool) para pesquisar a empresa.
-2. Extrai do resultado: site oficial, telefone comercial público e WhatsApp comercial público.
-3. Registra a **fonte** de cada achado a partir dos `grounding_chunks` retornados pela API (as URLs realmente usadas pelo modelo para responder).
-4. Atribui um nível de confiança (`alta`/`media`/`baixa`).
+### Opção A — Grounding nativo do Gemini (mais simples, exige billing)
+
+Usa a ferramenta `google_search` embutida do Gemini: uma chamada, o próprio Gemini decide pesquisar e responde já com as fontes. Mais simples, mas a Google exige uma conta de faturamento vinculada ao projeto para usar essa ferramenta (mesmo que o uso fique dentro da faixa gratuita).
 
 ```python enrich_leads.py
 response = client.models.generate_content(
-    model="gemini-2.5-flash",
+    model="gemini-flash-latest",
     contents=prompt,
     config=types.GenerateContentConfig(
         tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -94,19 +93,53 @@ response = client.models.generate_content(
 # response.candidates[0].grounding_metadata.grounding_chunks -> fontes usadas
 ```
 
-Script completo: `scripts/prospeccao-fintech/enrich_leads.py`. Ele:
-
-- lê o CSV exportado das etapas 1-2,
-- pesquisa lead a lead (com retry e limite de 1 chamada/segundo para respeitar rate limit),
-- grava um CSV incremental (`flush` a cada linha), então uma falha no meio não perde o progresso já feito.
-
-Rodar:
+Script completo: `scripts/prospeccao-fintech/enrich_leads.py`.
 
 ```bash
 export GEMINI_API_KEY="sua-chave"
 pip install -r scripts/prospeccao-fintech/requirements.txt
 python scripts/prospeccao-fintech/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
 ```
+
+### Opção B — Agente com busca ativa (sem billing no Gemini, precisa de rede aberta)
+
+Em vez de um grounding de busca única, o Gemini age como um **agente**: recebe duas ferramentas via function calling —
+
+- `buscar_web(query)` → pesquisa no [Brave Search API](https://brave.com/search/api/) (plano gratuito, sem cartão) e devolve título/URL/resumo dos resultados;
+- `registrar_resultado(...)` → finaliza a investigação desta empresa com os campos estruturados.
+
+O próprio modelo decide **quantas buscas fazer e com quais termos** (ex.: primeiro `"<empresa> <cidade>"` para achar o site, depois `"<empresa> telefone"` ou `"<empresa> whatsapp"` para confirmar contato), dentro de um orçamento máximo de buscas por empresa — mais próximo de como um analista pesquisaria manualmente do que uma única query.
+
+```python agentic_enrich.py
+TOOLS = [types.Tool(function_declarations=[
+    types.FunctionDeclaration(name="buscar_web", ...),
+    types.FunctionDeclaration(name="registrar_resultado", ...),
+])]
+
+for _ in range(max_searches + 2):
+    response = client.models.generate_content(
+        model="gemini-flash-latest",
+        contents=contents,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, tools=TOOLS),
+    )
+    # se o modelo chamou buscar_web -> roda brave_search() e devolve o resultado
+    # se chamou registrar_resultado -> encerra e retorna os campos estruturados
+```
+
+Script completo: `scripts/prospeccao-fintech/agentic_enrich.py`. Funciona com qualquer CSV — usa todas as colunas preenchidas do lead como contexto de busca, então serve tanto para a saída da etapa 1-2 (`cnpj, razao_social, ...`) quanto para outras bases de empresas.
+
+<Warning>
+  O Brave Search e o `api.deepseek.com` (caso opte por trocar o modelo de extração) não são alcançáveis em ambientes de rede restrita/sandbox — só domínios `googleapis.com` costumam passar por políticas de rede corporativas. Rode esta opção em um ambiente com acesso normal à internet.
+</Warning>
+
+```bash
+export GEMINI_API_KEY="sua-chave"      # grátis, sem billing (não usa grounding nativo)
+export BRAVE_API_KEY="sua-chave-brave" # plano gratuito, sem cartão
+pip install -r scripts/prospeccao-fintech/requirements.txt
+python scripts/prospeccao-fintech/agentic_enrich.py leads_com_socios.csv leads_enriquecidos.csv
+```
+
+Ambas as opções gravam incrementalmente (`flush` a cada linha) e pulam leads já processados se você rodar de novo em cima do mesmo arquivo de saída — uma falha no meio não perde o progresso.
 
 ## Planilha final
 
