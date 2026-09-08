@@ -179,6 +179,8 @@ O último script junta tudo e adiciona as 5 colunas novas:
 | `site_oficial` | URL do site oficial encontrado pela IA |
 | `telefone_comercial_ia` | Telefone comercial encontrado na web (complementa o da Receita) |
 | `whatsapp_publico` | Número de WhatsApp comercial público |
+| `linkedin_decisor` | Perfil do LinkedIn do sócio/decisor, se achado |
+| `telefone_decisor_ia` | Telefone pessoal do decisor — raramente preenchido, só com fonte pública explícita |
 | `fonte_ia` | URLs usadas pela IA para confirmar os dados acima |
 | `confianca_ia` | `alta` / `media` / `baixa` |
 
@@ -187,4 +189,16 @@ python scripts/prospeccao-fintech/build_planilha_final.py \
   leads_com_socios.csv leads_enriquecidos.csv planilha_final.xlsx
 ```
 
-O resultado (`planilha_final.xlsx`) tem uma linha por CNPJ, com todos os dados cadastrais da Receita + sócios/decisor + as 5 colunas da IA acima.
+O resultado (`planilha_final.xlsx`) tem uma linha por CNPJ, com todos os dados cadastrais da Receita + sócios/decisor + as colunas da IA acima.
+
+## Etapa 4 (opcional) — adaptar para outra ferramenta
+
+Se o destino final for outra ferramenta (disparo de WhatsApp, CRM, etc.) com seu próprio formato de importação, `adaptar_formato_importacao.py` remapeia a saída do pipeline para esse formato — por padrão, colunas `nome, primeiro_nome, telefone, email, regiao, valor`:
+
+```bash
+python scripts/prospeccao-fintech/adaptar_formato_importacao.py \
+  leads_com_socios.csv leads_enriquecidos.csv saida_importacao.csv \
+  --fonte-original base_original.xlsx
+```
+
+`--fonte-original` é opcional: se a base original (antes do filtro) já trouxer e-mail/telefone brutos, esse arquivo é usado como fallback para quem a IA não achou nada (a IA não busca e-mail, só site/telefone/WhatsApp/LinkedIn). Esta é a entrega final por padrão: sempre que o pipeline for rodado, o resultado é convertido para esse formato antes de ser entregue.
