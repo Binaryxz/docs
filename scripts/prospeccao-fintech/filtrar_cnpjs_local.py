@@ -167,9 +167,14 @@ def percentual_cnae(principal: str, secundaria: str) -> tuple[float, int]:
 
 def _linhas_de_bufferedreader(f_bin, campos_padrao: list[str]) -> Iterator[dict]:
     """Recebe um stream binário (arquivo aberto ou membro de zip), detecta
-    encoding/delimitador/cabeçalho pela primeira linha, e devolve um
-    iterador de dicts com nomes de coluna padronizados (CAMPOS_*)."""
-    amostra = f_bin.readline()
+    encoding/delimitador/cabeçalho por uma amostra do início do arquivo, e
+    devolve um iterador de dicts com nomes de coluna padronizados
+    (CAMPOS_*)."""
+    # Amostra grande (não só a 1a linha): um arquivo Latin-1 pode ter dezenas
+    # de linhas puramente ASCII antes do primeiro acento aparecer, o que
+    # faria uma amostra pequena decodificar "com sucesso" como UTF-8 por
+    # engano e quebrar mais adiante no arquivo.
+    amostra = f_bin.read(1_000_000)
     encoding = "utf-8-sig"
     try:
         amostra.decode("utf-8")
@@ -177,13 +182,13 @@ def _linhas_de_bufferedreader(f_bin, campos_padrao: list[str]) -> Iterator[dict]
         encoding = "latin-1"
     f_bin.seek(0)
 
-    primeira_linha = amostra.decode(encoding, errors="replace")
+    primeira_linha = amostra.split(b"\n", 1)[0].decode(encoding, errors="replace")
     delimitador = ";" if primeira_linha.count(";") >= primeira_linha.count(",") else ","
     tem_cabecalho = any(
         campo in primeira_linha for campo in ("cnpj_basico", "razao_social", "nome_socio_razao_social")
     )
 
-    texto = io.TextIOWrapper(f_bin, encoding=encoding, newline="")
+    texto = io.TextIOWrapper(f_bin, encoding=encoding, newline="", errors="replace")
     if tem_cabecalho:
         reader = csv.DictReader(texto, delimiter=delimitador)
     else:
