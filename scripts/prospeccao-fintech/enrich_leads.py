@@ -6,6 +6,8 @@ para pesquisar no Google (grounding nativo, sem scraping manual) e devolver:
   - site oficial
   - telefone comercial público
   - WhatsApp comercial público
+  - se um decisor foi informado (nome_decisor): um contato profissional
+    público dele (perfil do LinkedIn e/ou telefone, quando publicados)
   - as fontes (URLs) de onde cada dado veio
 
 Uso:
@@ -41,9 +43,24 @@ RESPONSE_SCHEMA = {
         "site_oficial": {"type": "STRING", "description": "URL do site oficial, ou vazio se não encontrado"},
         "telefone_comercial_ia": {"type": "STRING", "description": "Telefone comercial público, ou vazio"},
         "whatsapp_publico": {"type": "STRING", "description": "Número de WhatsApp comercial público, ou vazio"},
+        "linkedin_decisor": {
+            "type": "STRING",
+            "description": "URL do perfil do LinkedIn do decisor informado, ou vazio se não houver decisor ou não for encontrado",
+        },
+        "telefone_decisor_ia": {
+            "type": "STRING",
+            "description": "Telefone público do decisor informado (raramente público — só preencha com fonte confirmada), ou vazio",
+        },
         "confianca_ia": {"type": "STRING", "enum": ["alta", "media", "baixa"]},
     },
-    "required": ["site_oficial", "telefone_comercial_ia", "whatsapp_publico", "confianca_ia"],
+    "required": [
+        "site_oficial",
+        "telefone_comercial_ia",
+        "whatsapp_publico",
+        "linkedin_decisor",
+        "telefone_decisor_ia",
+        "confianca_ia",
+    ],
 }
 
 PROMPT_TEMPLATE = """\
@@ -51,6 +68,7 @@ Pesquise no Google a empresa brasileira abaixo e encontre, se existirem publicam
 1. O site oficial da empresa
 2. Um telefone comercial público
 3. Um número de WhatsApp comercial público (linha divulgada em site, Google Meu Negócio, etc.)
+4. Se um possível decisor foi indicado abaixo, tente achar um contato profissional público dele: o perfil do LinkedIn é a fonte mais confiável; telefone pessoal raramente é público, só preencha "telefone_decisor_ia" se achar um número explicitamente associado a essa pessoa em fonte pública (ex.: assinatura de e-mail publicada, cartão de visita digital, perfil profissional).
 
 Empresa: {razao_social}
 Nome fantasia: {nome_fantasia}
@@ -59,6 +77,7 @@ Localização: {municipio}/{uf}
 {decisor_linha}{descricao_linha}
 Regras:
 - Não invente nada. Se não encontrar algum dado com uma fonte pública confiável, deixe o campo vazio ("").
+- Se nenhum decisor foi indicado acima, deixe "linkedin_decisor" e "telefone_decisor_ia" vazios.
 - "confianca_ia" = "alta" se o site oficial bate com a razão social/CNPJ; "media" se é plausível mas não 100% confirmado; "baixa" se os dados são incertos.
 Responda apenas no formato JSON pedido.
 """
@@ -70,6 +89,8 @@ class Enrichment:
     site_oficial: str
     telefone_comercial_ia: str
     whatsapp_publico: str
+    linkedin_decisor: str
+    telefone_decisor_ia: str
     fonte_ia: str
     confianca_ia: str
 
@@ -124,6 +145,8 @@ def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
                 site_oficial=data.get("site_oficial", ""),
                 telefone_comercial_ia=data.get("telefone_comercial_ia", ""),
                 whatsapp_publico=data.get("whatsapp_publico", ""),
+                linkedin_decisor=data.get("linkedin_decisor", ""),
+                telefone_decisor_ia=data.get("telefone_decisor_ia", ""),
                 fonte_ia=extract_sources(response),
                 confianca_ia=data.get("confianca_ia", "baixa"),
             )
@@ -137,6 +160,8 @@ def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
         site_oficial="",
         telefone_comercial_ia="",
         whatsapp_publico="",
+        linkedin_decisor="",
+        telefone_decisor_ia="",
         fonte_ia="",
         confianca_ia="baixa",
     )
@@ -156,6 +181,8 @@ def main(input_path: str, output_path: str) -> None:
         "site_oficial",
         "telefone_comercial_ia",
         "whatsapp_publico",
+        "linkedin_decisor",
+        "telefone_decisor_ia",
         "fonte_ia",
         "confianca_ia",
     ]
