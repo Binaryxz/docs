@@ -13,13 +13,17 @@ Uso:
     python enrich_leads.py leads_filtrados.csv leads_enriquecidos.csv
 
 Entrada esperada (CSV): colunas cnpj, razao_social, nome_fantasia, uf, municipio
-(o que sai de join_leads_socios.sql). A coluna nome_decisor, se presente, é
-usada apenas como contexto extra de busca (ajuda a desambiguar empresas com
-nome genérico) e não é obrigatória.
+(o que sai de join_leads_socios.sql). As colunas nome_decisor e descricao, se
+presentes, são usadas apenas como contexto extra de busca (ajudam a
+desambiguar empresas com nome genérico) e não são obrigatórias.
+
+Roda de novo em cima do mesmo arquivo de saída para retomar de onde parou:
+CNPJs já presentes em <saida.csv> são pulados.
 """
 
 import csv
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, asdict
@@ -52,7 +56,7 @@ Empresa: {razao_social}
 Nome fantasia: {nome_fantasia}
 CNPJ: {cnpj}
 Localização: {municipio}/{uf}
-{decisor_linha}
+{decisor_linha}{descricao_linha}
 Regras:
 - Não invente nada. Se não encontrar algum dado com uma fonte pública confiável, deixe o campo vazio ("").
 - "confianca_ia" = "alta" se o site oficial bate com a razão social/CNPJ; "media" se é plausível mas não 100% confirmado; "baixa" se os dados são incertos.
@@ -89,6 +93,9 @@ def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
     nome_decisor = lead.get("nome_decisor", "").strip()
     decisor_linha = f"Possível decisor (sócio-administrador/diretor): {nome_decisor}\n" if nome_decisor else ""
 
+    descricao = lead.get("descricao", "").strip()
+    descricao_linha = f"Descrição conhecida da empresa: {descricao}\n" if descricao else ""
+
     prompt = PROMPT_TEMPLATE.format(
         razao_social=lead.get("razao_social", ""),
         nome_fantasia=lead.get("nome_fantasia", ""),
@@ -96,6 +103,7 @@ def enrich_one(client: genai.Client, lead: dict) -> Enrichment:
         municipio=lead.get("municipio", ""),
         uf=lead.get("uf", ""),
         decisor_linha=decisor_linha,
+        descricao_linha=descricao_linha,
     )
 
     last_error = None
@@ -152,11 +160,23 @@ def main(input_path: str, output_path: str) -> None:
         "confianca_ia",
     ]
 
-    with open(output_path, "w", newline="", encoding="utf-8") as f_out:
+    done_cnpjs = set()
+    if os.path.exists(output_path):
+        with open(output_path, newline="", encoding="utf-8") as f_prev:
+            for row in csv.DictReader(f_prev):
+                done_cnpjs.add(row["cnpj"])
+
+    write_header = not os.path.exists(output_path)
+
+    with open(output_path, "a", newline="", encoding="utf-8") as f_out:
         writer = csv.DictWriter(f_out, fieldnames=fieldnames)
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
 
         for i, lead in enumerate(leads, start=1):
+            cnpj = lead.get("cnpj", "")
+            if cnpj and cnpj in done_cnpjs:
+                continue
             print(f"[{i}/{len(leads)}] pesquisando {lead.get('razao_social')}...", file=sys.stderr)
             enrichment = enrich_one(client, lead)
             writer.writerow({**lead, **asdict(enrichment)})
