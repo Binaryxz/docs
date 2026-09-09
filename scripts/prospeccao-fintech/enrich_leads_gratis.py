@@ -251,7 +251,20 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
         if fonte_wa:
             fontes.append(fonte_wa)
 
-    confianca = "media" if site_oficial else "baixa"
+    # Cruzamento de fontes, sem custo e sem serviço de terceiros: se o
+    # telefone achado especificamente pelo NOME da pessoa (telefone_decisor_ia,
+    # via wa.me) bate com o telefone/WhatsApp achado pela busca da EMPRESA,
+    # isso é evidência real de que é a mesma pessoa — apareceu de forma
+    # independente em dois contextos diferentes, não é só um número solto.
+    numero_bate = bool(telefone_decisor_ia) and telefone_decisor_ia in (telefone_comercial_ia, whatsapp_publico)
+    verificacao = "numero_pessoal_bate_com_comercial" if numero_bate else ("so_pessoal" if telefone_decisor_ia else "so_comercial")
+
+    if numero_bate:
+        confianca = "alta"
+    elif site_oficial:
+        confianca = "media"
+    else:
+        confianca = "baixa"
 
     return {
         "cnpj": lead.get("cnpj", ""),
@@ -260,6 +273,7 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
         "whatsapp_publico": whatsapp_publico,
         "linkedin_decisor": linkedin_decisor,
         "telefone_decisor_ia": telefone_decisor_ia,
+        "verificacao": verificacao,
         "fonte_ia": " | ".join(dict.fromkeys(fontes)),
         "confianca_ia": confianca,
     }
@@ -276,7 +290,7 @@ def main(input_path: str, output_path: str) -> None:
 
     campos_saida = [
         "cnpj", "site_oficial", "telefone_comercial_ia", "whatsapp_publico",
-        "linkedin_decisor", "telefone_decisor_ia", "fonte_ia", "confianca_ia",
+        "linkedin_decisor", "telefone_decisor_ia", "verificacao", "fonte_ia", "confianca_ia",
     ]
 
     done_cnpjs = set()
