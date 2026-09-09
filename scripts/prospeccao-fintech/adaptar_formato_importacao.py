@@ -37,6 +37,15 @@ import pandas as pd
 COLUNAS_MODELO = ["nome", "primeiro_nome", "telefone", "email", "regiao", "valor"]
 
 
+def texto(valor) -> str:
+    """Normaliza qualquer valor vindo do pandas para string — células vazias
+    de colunas mescladas podem chegar como float('nan') em vez de string
+    vazia, mesmo com dtype=str, e 'nan or x' não funciona (NaN é truthy)."""
+    if valor is None or (isinstance(valor, float) and valor != valor):  # NaN != NaN
+        return ""
+    return str(valor)
+
+
 def normaliza_telefone(bruto: str) -> str:
     if not bruto or not isinstance(bruto, str):
         return ""
@@ -98,22 +107,29 @@ def main(leads_path: str, enriquecidos_path: str, output_path: str, fonte_origin
         cnpj = row.get("cnpj", "")
         fallback = fallback_por_cnpj.get(cnpj, {})
 
+        telefone_receita = normaliza_telefone(texto(row.get("ddd_1")) + texto(row.get("telefone_1")))
         telefone = ""
-        for candidato in [row.get("telefone_comercial_ia"), row.get("whatsapp_publico"), fallback.get("telefone")]:
+        for candidato in [row.get("telefone_comercial_ia"), row.get("whatsapp_publico"), fallback.get("telefone"), telefone_receita]:
+            candidato = texto(candidato)
             telefone = normaliza_telefone(candidato) if candidato else ""
             if telefone:
                 break
 
-        nome_fantasia = row.get("nome_fantasia") or row.get("razao_social") or ""
+        # correio_eletronico já vem no próprio arquivo de leads quando a
+        # origem é a Receita Federal (join_leads_socios.sql / filtrar_cnpjs_local.py)
+        # — usa como fallback quando não veio nada de --fonte-original.
+        email = fallback.get("email") or texto(row.get("correio_eletronico"))
+
+        nome_fantasia = texto(row.get("nome_fantasia")) or texto(row.get("razao_social"))
         primeiro_nome = nome_fantasia.split()[0] if nome_fantasia.split() else ""
 
         linhas_saida.append(
             {
-                "nome": row.get("razao_social", ""),
+                "nome": texto(row.get("razao_social")),
                 "primeiro_nome": primeiro_nome,
                 "telefone": telefone,
-                "email": fallback.get("email", ""),
-                "regiao": row.get("municipio", ""),
+                "email": email,
+                "regiao": texto(row.get("municipio")),
                 "valor": "",
             }
         )
