@@ -1,8 +1,18 @@
 """
 Enriquece leads com site/telefone/WhatsApp/LinkedIn do decisor usando SÓ o
-Brave Search (plano gratuito, sem cartão) + heurísticas de texto (regex,
-comparação de domínio) — SEM NENHUMA chamada de LLM. Custo real zero,
-dentro da cota gratuita do Brave.
+Brave Search + heurísticas de texto (regex, comparação de domínio) — SEM
+NENHUMA chamada de LLM. Custo bem baixo (o Brave cobra por busca desde
+fev/2026, não é mais 100% gratuito — mas é uma fração do custo de usar IA).
+
+Filtro de porte (--max-funcionarios): busca a página da empresa no LinkedIn
+e extrai a faixa "X-Y employees" que o Brave mostra no resumo. Se a faixa
+inteira estiver acima do limite, pula o resto das buscas desse lead pra não
+gastar à toa com quem não interessa — é o PRIMEIRO passo de cada lead. As
+faixas do LinkedIn (1-10, 11-50, 51-200...) não batem exatamente com
+qualquer limite arbitrário, então quando o limite cai DENTRO de uma faixa
+(ex.: limite 40 dentro de "11-50"), o lead passa mesmo assim (falso negativo
+é pior que falso positivo aqui) — a coluna `porte_linkedin` mostra a faixa
+real encontrada pra você conferir manualmente se quiser.
 
 Trade-off: sem um modelo de IA julgando os resultados, a precisão é menor
 que enrich_leads.py ou agentic_enrich.py — trate isso como uma primeira
@@ -76,6 +86,33 @@ def dominio_bloqueado(url: str) -> bool:
     return False
 
 REGEX_TELEFONE = re.compile(r"(?:\+?55\s?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}")
+
+# "Company size · 11-50 employees" (ou "51-200 employees", etc.) — é assim
+# que o LinkedIn expõe a faixa de funcionários, e o Brave costuma indexar
+# esse texto no resumo da página da empresa quando ela aparece nos resultados.
+REGEX_FUNCIONARIOS = re.compile(r"(\d[\d,]*)\s*-\s*(\d[\d,]*)\s*employees", re.IGNORECASE)
+
+
+def achar_porte_empresa(resultados: list[dict], razao_social: str, nome_fantasia: str) -> tuple[str, str]:
+    """Devolve (faixa_encontrada, classificacao), onde classificacao é
+    'sim' (toda a faixa está dentro do limite), 'nao' (toda a faixa está
+    acima), 'provavel' (o limite cai dentro da faixa) ou '' (não achou)."""
+    alvo_razao = nome_base(razao_social)
+    alvo_fantasia = nome_base(nome_fantasia) if nome_fantasia else ""
+    for r in resultados:
+        if "linkedin.com/company/" not in r["url"]:
+            continue
+        alvo = normaliza(r["url"] + " " + r["titulo"])
+        menciona_empresa = (alvo_fantasia and alvo_fantasia in alvo) or (alvo_razao and alvo_razao[:6] in alvo)
+        if not menciona_empresa:
+            continue
+        m = REGEX_FUNCIONARIOS.search(r["resumo"])
+        if not m:
+            continue
+        baixo = int(m.group(1).replace(",", ""))
+        alto = int(m.group(2).replace(",", ""))
+        return f"{baixo}-{alto}", (baixo, alto)
+    return "", None
 
 # Link direto de WhatsApp (wa.me/<numero> ou api.whatsapp.com/send?phone=<numero>).
 # Esse formato só existe quando ALGUÉM monta deliberadamente um link clicável de
@@ -197,7 +234,7 @@ def achar_linkedin(resultados: list[dict], nome_decisor: str) -> str:
     return ""
 
 
-def enrich_one(lead: dict, brave_api_key: str) -> dict:
+def enrich_one(lead: dict, brave_api_key: str, max_funcionarios: int | None = None) -> dict:
     razao_social = lead.get("razao_social", "")
     nome_fantasia = lead.get("nome_fantasia", "")
     municipio = lead.get("municipio", "")
@@ -207,6 +244,42 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
     fontes = []
     site_oficial = telefone_comercial_ia = whatsapp_publico = ""
     linkedin_decisor = ""
+    porte_linkedin = ""
+    porte_classificacao = ""
+
+    if max_funcionarios is not None:
+        try:
+            r0 = brave_search(f"{razao_social} linkedin funcionarios employees", brave_api_key)
+        except Exception as exc:
+            print(f"[aviso] busca de porte falhou p/ {razao_social}: {exc}", file=sys.stderr)
+            r0 = []
+        porte_linkedin, faixa = achar_porte_empresa(r0, razao_social, nome_fantasia)
+        if faixa:
+            baixo, alto = faixa
+            if alto <= max_funcionarios:
+                porte_classificacao = "sim"
+            elif baixo > max_funcionarios:
+                porte_classificacao = "nao"
+            else:
+                porte_classificacao = "provavel"  # limite cai dentro da faixa
+
+        if porte_classificacao == "nao":
+            # empresa claramente maior que o limite: não vale gastar o
+            # resto das buscas (site/telefone/decisor) nela
+            return {
+                "cnpj": lead.get("cnpj", ""),
+                "site_oficial": "",
+                "telefone_comercial_ia": "",
+                "whatsapp_publico": "",
+                "linkedin_decisor": "",
+                "telefone_decisor_ia": "",
+                "porte_linkedin": porte_linkedin,
+                "porte_ate_limite": porte_classificacao,
+                "verificacao": "pulado_porte_acima_do_limite",
+                "fonte_ia": "",
+                "confianca_ia": "baixa",
+            }
+        time.sleep(SECONDS_BETWEEN_CALLS)
 
     try:
         r1 = brave_search(f"{razao_social} {municipio} {uf} site oficial", brave_api_key)
@@ -273,13 +346,15 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
         "whatsapp_publico": whatsapp_publico,
         "linkedin_decisor": linkedin_decisor,
         "telefone_decisor_ia": telefone_decisor_ia,
+        "porte_linkedin": porte_linkedin,
+        "porte_ate_limite": porte_classificacao,
         "verificacao": verificacao,
         "fonte_ia": " | ".join(dict.fromkeys(fontes)),
         "confianca_ia": confianca,
     }
 
 
-def main(input_path: str, output_path: str) -> None:
+def main(input_path: str, output_path: str, max_funcionarios: int | None = None) -> None:
     brave_api_key = os.environ["BRAVE_API_KEY"]
 
     with open(input_path, newline="", encoding="utf-8") as f_in:
@@ -290,7 +365,8 @@ def main(input_path: str, output_path: str) -> None:
 
     campos_saida = [
         "cnpj", "site_oficial", "telefone_comercial_ia", "whatsapp_publico",
-        "linkedin_decisor", "telefone_decisor_ia", "verificacao", "fonte_ia", "confianca_ia",
+        "linkedin_decisor", "telefone_decisor_ia", "porte_linkedin", "porte_ate_limite",
+        "verificacao", "fonte_ia", "confianca_ia",
     ]
 
     done_cnpjs = set()
@@ -300,6 +376,7 @@ def main(input_path: str, output_path: str) -> None:
                 done_cnpjs.add(row["cnpj"])
 
     write_header = not os.path.exists(output_path)
+    pulados_por_porte = 0
     with open(output_path, "a", newline="", encoding="utf-8") as f_out:
         writer = csv.DictWriter(f_out, fieldnames=campos_saida)
         if write_header:
@@ -310,16 +387,29 @@ def main(input_path: str, output_path: str) -> None:
             if cnpj and cnpj in done_cnpjs:
                 continue
             print(f"[{i}/{len(leads)}] pesquisando {lead.get('razao_social')} (gratuito, Brave)...", file=sys.stderr)
-            resultado = enrich_one(lead, brave_api_key)
+            resultado = enrich_one(lead, brave_api_key, max_funcionarios)
+            if resultado.get("verificacao") == "pulado_porte_acima_do_limite":
+                pulados_por_porte += 1
             writer.writerow(resultado)
             f_out.flush()
             time.sleep(SECONDS_BETWEEN_CALLS)
 
+    if max_funcionarios is not None:
+        print(f"[info] {pulados_por_porte} leads pulados por terem mais de {max_funcionarios} funcionários (LinkedIn)", file=sys.stderr)
     print("CONCLUIDO", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python enrich_leads_gratis.py <entrada.csv> <saida.csv>", file=sys.stderr)
-        sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Enriquece leads via Brave Search (sem LLM). Custo baixo, não é mais 100% gratuito desde fev/2026.")
+    parser.add_argument("entrada", help="CSV de entrada")
+    parser.add_argument("saida", help="CSV de saída (retomável)")
+    parser.add_argument(
+        "--max-funcionarios",
+        type=int,
+        default=None,
+        help="Se informado, checa o porte da empresa no LinkedIn primeiro e pula o resto das buscas para empresas claramente acima desse limite (ex.: --max-funcionarios 40)",
+    )
+    args = parser.parse_args()
+    main(args.entrada, args.saida, args.max_funcionarios)
