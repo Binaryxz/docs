@@ -10,6 +10,14 @@ triagem gratuita da base inteira. Para os leads mais importantes, ainda
 vale rodar depois a versão com IA (mais cara, mas mais precisa) só nesse
 subconjunto menor.
 
+Além do site/telefone/WhatsApp da empresa e do LinkedIn do decisor, quando
+há um nome de decisor no lead também busca um link wa.me/api.whatsapp.com
+associado a essa pessoa (bio de Instagram, Linktree, site pessoal) — é o
+sinal mais confiável de WhatsApp pessoal genuíno que dá pra achar sem IA,
+mas ainda assim raro de existir. Isso usa 1 busca a mais por lead com
+decisor (4 no total em vez de 3), então consome a cota gratuita do Brave
+mais rápido — ajuste o volume por rodada se estiver perto do limite mensal.
+
 Requisitos: só BRAVE_API_KEY (https://brave.com/search/api/, free tier).
 Não precisa de GEMINI_API_KEY nem de billing em lugar nenhum.
 
@@ -68,6 +76,13 @@ def dominio_bloqueado(url: str) -> bool:
     return False
 
 REGEX_TELEFONE = re.compile(r"(?:\+?55\s?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}")
+
+# Link direto de WhatsApp (wa.me/<numero> ou api.whatsapp.com/send?phone=<numero>).
+# Esse formato só existe quando ALGUÉM monta deliberadamente um link clicável de
+# contato — é o sinal mais forte de número pessoal genuinamente publicado pela
+# própria pessoa (bio de Instagram, Linktree, site pessoal de um único produto),
+# bem mais confiável que um número solto encontrado em texto livre.
+REGEX_WHATSAPP_LINK = re.compile(r"(?:wa\.me/\+?|api\.whatsapp\.com/send\?phone=\+?)(\d{10,13})")
 
 
 def normaliza(texto: str) -> str:
@@ -148,6 +163,26 @@ def achar_telefone(resultados: list[dict], cnpj: str, razao_social: str, nome_fa
     return "", ""
 
 
+def achar_whatsapp_pessoal(resultados: list[dict], nome_decisor: str) -> tuple[str, str]:
+    """Procura um link wa.me/api.whatsapp.com nos resultados — na URL do
+    próprio resultado (ex.: um Linktree cujo link de destino é um wa.me) ou
+    no título/resumo (páginas que exibem o link como texto). Exige que o
+    resultado mencione o nome do decisor, mesma lógica de achar_telefone."""
+    partes_nome = [p for p in nome_decisor.split() if len(p) > 2]
+    for r in resultados:
+        if dominio_bloqueado(r["url"]):
+            continue
+        alvo = normaliza(r["url"] + " " + r["titulo"] + " " + r["resumo"])
+        menciona_pessoa = any(normaliza(p) in alvo for p in partes_nome)
+        if not menciona_pessoa:
+            continue
+        for campo in (r["url"], r["titulo"], r["resumo"]):
+            m = REGEX_WHATSAPP_LINK.search(campo)
+            if m:
+                return m.group(1), r["url"]
+    return "", ""
+
+
 def achar_linkedin(resultados: list[dict], nome_decisor: str) -> str:
     """Só aceita um perfil do LinkedIn se algum sobrenome do decisor aparecer
     na própria URL/título do resultado — sem isso, a busca pode devolver o
@@ -194,6 +229,7 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
     if telefone_comercial_ia and any("whatsapp" in (r["titulo"] + r["resumo"]).lower() for r in r2):
         whatsapp_publico = telefone_comercial_ia
 
+    telefone_decisor_ia = ""
     if nome_decisor:
         time.sleep(SECONDS_BETWEEN_CALLS)
         try:
@@ -205,6 +241,16 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
         if linkedin_decisor:
             fontes.append(linkedin_decisor)
 
+        time.sleep(SECONDS_BETWEEN_CALLS)
+        try:
+            r4 = brave_search(f'"{nome_decisor}" wa.me', brave_api_key)
+        except Exception as exc:
+            print(f"[aviso] busca de wa.me falhou p/ {nome_decisor}: {exc}", file=sys.stderr)
+            r4 = []
+        telefone_decisor_ia, fonte_wa = achar_whatsapp_pessoal(r4, nome_decisor)
+        if fonte_wa:
+            fontes.append(fonte_wa)
+
     confianca = "media" if site_oficial else "baixa"
 
     return {
@@ -213,7 +259,7 @@ def enrich_one(lead: dict, brave_api_key: str) -> dict:
         "telefone_comercial_ia": telefone_comercial_ia,
         "whatsapp_publico": whatsapp_publico,
         "linkedin_decisor": linkedin_decisor,
-        "telefone_decisor_ia": "",
+        "telefone_decisor_ia": telefone_decisor_ia,
         "fonte_ia": " | ".join(dict.fromkeys(fontes)),
         "confianca_ia": confianca,
     }
