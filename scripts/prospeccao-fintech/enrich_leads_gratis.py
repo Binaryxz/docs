@@ -60,6 +60,11 @@ def dominio_bloqueado(url: str) -> bool:
         return True
     if PADRAO_DOMINIO_SUSPEITO.search(url):
         return True
+    # Regra geral: nenhuma empresa de verdade usa "cnpj" no próprio domínio —
+    # isso é sempre um site agregador/consulta (existem dezenas, impossível
+    # listar todos um por um), então bloqueia por padrão.
+    if "cnpj" in dominio:
+        return True
     return False
 
 REGEX_TELEFONE = re.compile(r"(?:\+?55\s?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}")
