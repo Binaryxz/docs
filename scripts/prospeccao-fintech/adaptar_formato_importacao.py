@@ -12,6 +12,11 @@ Uso:
 os leads, com colunas de e-mail/telefone brutos), usa telefone/e-mail dessa
 fonte como fallback para quem a IA não encontrou.
 
+Se <enriquecidos.csv> tiver a coluna porte_ate_limite (gerada por
+enrich_leads_gratis.py --max-funcionarios), leads marcados como "nao"
+(empresa claramente acima do limite de funcionários) são EXCLUÍDOS da
+planilha final — não aparecem, não é só uma coluna informativa.
+
 Mapeamento:
   nome          <- razao_social
   primeiro_nome <- primeira palavra de nome_fantasia (ou razao_social)
@@ -65,8 +70,14 @@ def main(leads_path: str, enriquecidos_path: str, output_path: str, fonte_origin
     leads = pd.read_csv(leads_path, dtype=str)
     enriquecidos = pd.read_csv(enriquecidos_path, dtype=str)
 
-    colunas_ia = [c for c in ["telefone_comercial_ia", "whatsapp_publico"] if c in enriquecidos.columns]
+    colunas_ia = [c for c in ["telefone_comercial_ia", "whatsapp_publico", "porte_ate_limite"] if c in enriquecidos.columns]
     planilha = leads.merge(enriquecidos[["cnpj", *colunas_ia]], on="cnpj", how="left")
+
+    if "porte_ate_limite" in planilha.columns:
+        excluidos = (planilha["porte_ate_limite"] == "nao").sum()
+        planilha = planilha[planilha["porte_ate_limite"] != "nao"].copy()
+        if excluidos:
+            print(f"{excluidos} leads excluídos por terem porte acima do limite de funcionários.", file=sys.stderr)
 
     fallback_por_cnpj: dict[str, dict] = {}
     if fonte_original:
