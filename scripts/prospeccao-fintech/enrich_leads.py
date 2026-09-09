@@ -69,7 +69,7 @@ Pesquise no Google a empresa brasileira abaixo e encontre, se existirem publicam
 1. O site oficial da empresa
 2. Um telefone comercial público
 3. Um número de WhatsApp comercial público (linha divulgada em site, Google Meu Negócio, etc.)
-4. Se um possível decisor foi indicado abaixo, tente achar um contato profissional público dele: o perfil do LinkedIn é a fonte mais confiável; telefone pessoal raramente é público, só preencha "telefone_decisor_ia" se achar um número explicitamente associado a essa pessoa em fonte pública (ex.: assinatura de e-mail publicada, cartão de visita digital, perfil profissional).
+4. Se um possível decisor foi indicado abaixo, tente achar o LinkedIn e/ou WhatsApp/telefone pessoal dele: o LinkedIn é a fonte mais confiável; WhatsApp/telefone pessoal raramente é público, só preencha "telefone_decisor_ia" se a PRÓPRIA pessoa tiver divulgado esse número publicamente (bio de rede social dela, post/anúncio dela mesma, assinatura de e-mail publicada, perfil profissional com contato).
 
 Empresa: {razao_social}
 Nome fantasia: {nome_fantasia}
@@ -79,6 +79,7 @@ Localização: {municipio}/{uf}
 Regras:
 - Não invente nada. Se não encontrar algum dado com uma fonte pública confiável, deixe o campo vazio ("").
 - Se nenhum decisor foi indicado acima, deixe "linkedin_decisor" e "telefone_decisor_ia" vazios.
+- NUNCA use nem cite resultados de sites de "consulta de CPF", "busca de telefone", "achar pessoa", data brokers, ou qualquer serviço que venda/agregue dados pessoais de terceiros sem que a própria pessoa os tenha publicado. Só valem fontes onde a PRÓPRIA pessoa divulgou o dado publicamente.
 - "confianca_ia" = "alta" se o site oficial bate com a razão social/CNPJ; "media" se é plausível mas não 100% confirmado; "baixa" se os dados são incertos.
 Responda apenas no formato JSON pedido.
 """

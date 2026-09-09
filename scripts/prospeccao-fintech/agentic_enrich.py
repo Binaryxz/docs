@@ -125,15 +125,18 @@ Estratégia recomendada:
 2. Se achar o site (ou uma rede social oficial), faça buscas mais específicas \
    pra confirmar telefone/WhatsApp (ex.: "<nome da empresa> contato telefone", \
    "<nome da empresa> whatsapp comercial").
-3. Se o contexto trouxer um nome de sócio/decisor, dedique PELO MENOS 2 \
-   buscas específicas a essa PESSOA (não à empresa): "<nome do decisor> \
-   linkedin", "<nome do decisor> <nome da empresa>". O LinkedIn é a fonte \
-   mais confiável e mais provável de existir — priorize achar o perfil. \
-   Telefone pessoal é raro de ser público; só registre se uma fonte \
-   associar explicitamente aquele número a essa pessoa (ex.: assinatura de \
-   e-mail publicada, perfil profissional com contato, matéria de imprensa) \
-   — nunca infira ou reutilize o telefone comercial da empresa como se \
-   fosse o telefone pessoal do decisor.
+3. Se o contexto trouxer um nome de sócio/decisor, dedique PELO MENOS 3 \
+   buscas específicas a essa PESSOA (não à empresa), variando os termos: \
+   "<nome do decisor> linkedin", "<nome do decisor> <nome da empresa>", \
+   "<nome do decisor> whatsapp", "<nome do decisor> contato". O LinkedIn é \
+   a fonte mais confiável e mais provável de existir — priorize achar o \
+   perfil. WhatsApp/telefone pessoal é raro de ser público; só registre se \
+   uma fonte PÚBLICA E LEGÍTIMA associar explicitamente aquele número a \
+   essa pessoa (ex.: bio de rede social dela, post/anúncio dela mesma \
+   divulgando o contato, assinatura de e-mail publicada, matéria de \
+   imprensa, perfil profissional com contato) — nunca infira ou reutilize \
+   o telefone comercial da empresa como se fosse o telefone pessoal do \
+   decisor.
 4. Se depois de várias tentativas razoáveis não achar nada confiável, pare \
    e registre os campos vazios com confiança "baixa" — não fique insistindo \
    à toa.
@@ -147,6 +150,11 @@ Regras inegociáveis:
   telefone do decisor — são coisas diferentes, mesmo que pertençam à mesma \
   pessoa em empresas pequenas; só preencha o campo do decisor com um número \
   explicitamente atribuído a ele/ela como pessoa.
+- NUNCA use nem cite resultados de sites de "consulta de CPF", "busca de \
+  telefone", "achar pessoa", data brokers, ou qualquer serviço que venda/\
+  agregue dados pessoais de terceiros sem que a própria pessoa os tenha \
+  publicado. Só valem fontes onde a PRÓPRIA pessoa divulgou o dado \
+  publicamente (rede social dela, site dela, perfil profissional dela).
 - Se nenhum decisor foi indicado no contexto, deixe linkedin_decisor e \
   telefone_decisor_ia vazios.
 - Em fonte_ia, cite APENAS URLs que realmente vieram dos resultados de \
