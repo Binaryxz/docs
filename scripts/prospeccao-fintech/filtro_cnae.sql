@@ -3,11 +3,11 @@
 -- os arquivos oficiais da Receita Federal (Empresas, Estabelecimentos, Sócios).
 --
 -- Regra de negócio (etapa 1 do fluxo):
---   entra no resultado todo CNPJ que tenha PELO MENOS 60% dos 7 CNAEs alvo
+--   entra no resultado todo CNPJ que tenha PELO MENOS 60% dos 9 CNAEs alvo
 --   registrados entre seu CNAE principal + secundários, OU cuja razão social/
 --   nome fantasia contenha "fintech".
 --
--- 7 CNAEs alvo => limiar de 60% = pelo menos 5 dos 7 códigos presentes no CNPJ.
+-- 9 CNAEs alvo => limiar de 60% = pelo menos 6 dos 9 códigos presentes no CNPJ.
 
 DECLARE cnaes_alvo ARRAY<STRING> DEFAULT [
   '7490104', -- Principal: intermediação e agenciamento de serviços e negócios em geral
@@ -16,7 +16,9 @@ DECLARE cnaes_alvo ARRAY<STRING> DEFAULT [
   '6201501', -- Desenvolvimento de programas de computador sob encomenda
   '8299799', -- Outras atividades de serviços prestados às empresas
   '6209100', -- Suporte técnico, manutenção e outros serviços em TI
-  '6619399'  -- Outras atividades auxiliares dos serviços financeiros
+  '6619399', -- Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente
+  '6619302', -- Correspondentes de instituições financeiras
+  '8291100'  -- Atividades de cobranças e informações cadastrais
 ];
 
 DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
