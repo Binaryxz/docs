@@ -36,25 +36,30 @@ Fonte: [Base dos Dados](https://basedosdados.org), que replica os arquivos públ
 |---|---|---|
 | Principal | 74.90-1-04 | Intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários |
 | Secundário | 62.03-1-00 | Desenvolvimento e licenciamento de programas de computador não-customizáveis |
-| Secundário | 70.20-4-00 | Consultoria em gestão empresarial |
 | Secundário | 62.01-5-01 | Desenvolvimento de programas de computador sob encomenda |
 | Secundário | 82.99-7-99 | Outras atividades de serviços prestados às empresas |
 | Secundário | 62.09-1-00 | Suporte técnico, manutenção e outros serviços em TI |
 | Secundário | 66.19-3-99 | Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente |
 | Secundário | 66.19-3-02 | Correspondentes de instituições financeiras |
 | Secundário | 82.91-1-00 | Atividades de cobranças e informações cadastrais |
+| Secundário | 64.61-1-00 | Holdings de instituições financeiras |
+| Secundário | 64.92-1-00 | Securitização de créditos |
+| Secundário | 66.19-3-05 | Operadoras de cartões de débito |
+| Secundário | 66.19-3-06 | Casas de câmbio |
+| Secundário | 66.12-6-03 | Corretoras de câmbio |
 
 ### Regra do filtro
 
 Um CNPJ entra na lista quando:
 
-- **pelo menos 60% dos 9 CNAEs acima** (ou seja, 6 de 9) estão registrados nele, entre CNAE principal e secundários; **ou**
+- **pelo menos 60% dos 13 CNAEs acima** (ou seja, 8 de 13) estão registrados nele, entre CNAE principal e secundários; **ou**
 - a razão social ou o nome fantasia contém "fintech".
 
 ```sql filtro_cnae.sql
 DECLARE cnaes_alvo ARRAY<STRING> DEFAULT [
-  '7490104', '6203100', '7020400', '6201501', '8299799', '6209100',
-  '6619399', '6619302', '8291100'
+  '7490104', '6203100', '6201501', '8299799', '6209100',
+  '6619399', '6619302', '8291100',
+  '6461100', '6492100', '6619305', '6619306', '6612603'
 ];
 DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
 

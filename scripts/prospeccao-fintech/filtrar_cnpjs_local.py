@@ -58,13 +58,17 @@ from typing import Iterable, Iterator
 CNAES_ALVO = {
     "7490104",  # Principal: intermediação e agenciamento de serviços e negócios em geral
     "6203100",  # Desenvolvimento e licenciamento de programas de computador não-customizáveis
-    "7020400",  # Consultoria em gestão empresarial
     "6201501",  # Desenvolvimento de programas de computador sob encomenda
     "8299799",  # Outras atividades de serviços prestados às empresas
     "6209100",  # Suporte técnico, manutenção e outros serviços em TI
     "6619399",  # Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente
     "6619302",  # Correspondentes de instituições financeiras
     "8291100",  # Atividades de cobranças e informações cadastrais
+    "6461100",  # Holdings de instituições financeiras
+    "6492100",  # Securitização de créditos
+    "6619305",  # Operadoras de cartões de débito
+    "6619306",  # Casas de câmbio
+    "6612603",  # Corretoras de câmbio
 }
 LIMIAR_PADRAO = 0.6
 
