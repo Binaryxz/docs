@@ -77,14 +77,20 @@ PESO_TOTAL_ALVO = sum(CNAES_ALVO.values())
 LIMIAR_PADRAO = 0.6
 
 # Editável: termos comuns em razão social / nome fantasia de fintechs
-# brasileiras. Comparação é feita sem acento e em minúsculas (ver normaliza()).
+# brasileiras. Comparação é feita sem acento e em minúsculas (ver normaliza()) —
+# por isso os termos abaixo NUNCA levam acento/cedilha, mesmo quando a grafia
+# correta em português tem (ex.: "solucoes" p/ "Soluções"): normaliza() já
+# remove o acento do texto comparado, então uma entrada acentuada aqui nunca
+# daria match.
 #
-# Termos como "banco", "credito", "financeira", "investimento" e "corretora"
-# foram DELIBERADAMENTE excluídos: testados contra a base real, cada um
-# sozinho gerava milhares de falsos positivos (fundos de investimento,
-# holdings "XYZ Investimentos Ltda", corretoras de seguros tradicionais,
-# consultorias financeiras) que não são fintechs. Prefira uma lista mais
-# curta e precisa — o filtro por CNAE já cobre a maior parte do universo
+# Termos como "banco", "credito", "investimento" e "corretora" seguem
+# DELIBERADAMENTE excluídos: testados contra a base real, cada um sozinho
+# gerava milhares de falsos positivos (fundos de investimento, holdings
+# "XYZ Investimentos Ltda", corretoras de seguros tradicionais, consultorias
+# financeiras) que não são fintechs. "financeira" foi incluído a pedido apesar
+# do mesmo risco — se aparecer muito falso positivo tipo "XYZ Financeira
+# Ltda" que não é fintech, considere removê-lo de novo. Prefira uma lista
+# mais curta e precisa — o filtro por CNAE já cobre a maior parte do universo
 # real; a lista de palavras-chave é só um complemento para pegar fintechs
 # óbvias pelo nome que não bateram o limiar de CNAE.
 PALAVRAS_CHAVE_FINTECH = [
@@ -94,6 +100,7 @@ PALAVRAS_CHAVE_FINTECH = [
     "pay",
     "payment",
     "payments",
+    "bank",
     "banking",
     "solucoes financeiras",
     "solucao financeira",
@@ -102,6 +109,11 @@ PALAVRAS_CHAVE_FINTECH = [
     "carteira digital",
     "wallet",
     "meios de pagamento",
+    "instituicao financeira",
+    "correspondente bancario",
+    "casa de cambio",
+    "provedora de ativos virtuais",
+    "financeira",
     "adquirencia",
     "cripto",
     "criptomoeda",
