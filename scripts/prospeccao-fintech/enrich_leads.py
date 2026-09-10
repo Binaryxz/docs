@@ -79,7 +79,7 @@ Localização: {municipio}/{uf}
 Regras:
 - Não invente nada. Se não encontrar algum dado com uma fonte pública confiável, deixe o campo vazio ("").
 - Se nenhum decisor foi indicado acima, deixe "linkedin_decisor" e "telefone_decisor_ia" vazios.
-- NUNCA use nem cite resultados de sites de "consulta de CPF", "busca de telefone", "achar pessoa", data brokers, ou qualquer serviço que venda/agregue dados pessoais de terceiros sem que a própria pessoa os tenha publicado. Só valem fontes onde a PRÓPRIA pessoa divulgou o dado publicamente.
+- NUNCA use nem cite resultados de sites de "consulta de CPF", "busca de telefone", "achar pessoa", data brokers, ou qualquer serviço que venda/agregue dados pessoais de terceiros sem que a própria pessoa os tenha publicado. Só valem fontes onde a PRÓPRIA pessoa divulgou o dado publicamente. (A única exceção no pipeline é a etapa dedicada `verificar_telefone_decisor.py`, que usa o Sherlocker de forma controlada e auditável para confirmar titularidade de telefone — isso NÃO abre exceção para você, agente de busca livre, usar esse tipo de fonte.)
 - "confianca_ia" = "alta" se o site oficial bate com a razão social/CNPJ; "media" se é plausível mas não 100% confirmado; "baixa" se os dados são incertos.
 Responda apenas no formato JSON pedido.
 """

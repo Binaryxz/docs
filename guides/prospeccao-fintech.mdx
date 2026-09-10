@@ -10,7 +10,8 @@ icon: 'magnifying-glass'
 flowchart TD
     A[Base CNPJ<br/>Receita Federal via BigQuery] --> B[1. Filtro<br/>>=60% dos CNAEs alvo OU nome de fintech]
     B --> C[2. Dados cadastrais<br/>telefone/e-mail da Receita + sócios + decisor]
-    C --> D[3. Agente de IA<br/>Gemini com busca nativa no Google]
+    C --> C2[2.5 opcional. Sherlocker<br/>confirma titular do telefone / CPF do decisor]
+    C2 --> D[3. Agente de IA<br/>Gemini com busca nativa no Google]
     D --> E[Planilha final<br/>dados da Receita + 5 colunas novas]
 ```
 
@@ -101,7 +102,29 @@ Para sócios e decisor, cruzamos com a base de Sócios e priorizamos quem tem qu
 
 Veja `scripts/prospeccao-fintech/socios_decisor.sql`.
 
-Depois de salvar os resultados de `filtro_cnae.sql` e `socios_decisor.sql` em tabelas, junte os dois com `scripts/prospeccao-fintech/join_leads_socios.sql` (LEFT JOIN por `cnpj_basico`) e exporte o resultado como `leads_com_socios.csv` — é esse arquivo que alimenta a etapa 3.
+Depois de salvar os resultados de `filtro_cnae.sql` e `socios_decisor.sql` em tabelas, junte os dois com `scripts/prospeccao-fintech/join_leads_socios.sql` (LEFT JOIN por `cnpj_basico`) e exporte o resultado como `leads_com_socios.csv` — é esse arquivo que alimenta a etapa 2.5 (ou, se você pular essa etapa, diretamente a etapa 3).
+
+## Etapa 2.5 (opcional) — Confirmar titular do telefone via Sherlocker
+
+<Warning>
+  Esta etapa é uma **exceção deliberada** à regra do resto do pipeline: ela usa um serviço de terceiros (data broker) que identifica o titular de um número de telefone e consulta telefones por CPF — exatamente o tipo de fonte que o agente de IA da etapa 3 é instruído a **nunca** usar. Ela existe porque foi avaliada e aceita para este fluxo específico (confirmar contato comercial de um provável decisor de uma empresa já filtrada como lead B2B), não porque deixou de ser dado pessoal sensível. Mantenha a mesma política de acesso restrito/descarte já citada acima para dados de sócios, e nunca reaproveite essa lógica para consultar CPF de qualquer pessoa fora deste fluxo.
+</Warning>
+
+`scripts/prospeccao-fintech/verificar_telefone_decisor.py` usa a API REST do [Sherlocker](https://docs.sherlocker.com.br) (não o servidor MCP — que é voltado a clientes interativos como Claude Desktop/Cursor, não a scripts em lote) para, por lead:
+
+1. Verificar de quem é o telefone que a Receita Federal declarou (`GET /pessoas/telefone/{numero}`).
+2. Se o CPF retornado bater com o `documento_decisor` (do sócio identificado em `socios_decisor.sql`), confirma que o telefone da empresa já é do decisor.
+3. Senão, busca telefones do próprio CPF do decisor (`GET /telefones/cpf/{cpf}`) e usa **no máximo 2** números encontrados.
+
+```bash
+export SHERLOCKER_API_KEY="sua-chave"  # nunca no código — só variável de ambiente
+python scripts/prospeccao-fintech/verificar_telefone_decisor.py \
+  leads_com_socios.csv leads_com_telefone_decisor.csv
+```
+
+Adiciona ao CSV as colunas `titular_telefone_nome`, `titular_telefone_documento`, `telefone_confere_decisor` (`sim`/`nao`/`sem_telefone_declarado`/`sem_decisor_identificado`), `telefone_decisor_sherlocker_1`, `telefone_decisor_sherlocker_2` e `motivo_telefone_decisor`. Respeita o rate limit documentado (60 req/min) com backoff em 429, e é retomável (pula CNPJs já presentes na saída).
+
+Se você já tem um `telefone_decisor_sherlocker_1` confirmado, pode pular a busca do decisor na etapa 3 com `--pular-com-contato telefone_decisor_sherlocker_1` (mesma flag de `enrich_leads.py`/`agentic_enrich.py`), economizando chamadas de IA.
 
 ## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
 

@@ -154,7 +154,11 @@ Regras inegociáveis:
   telefone", "achar pessoa", data brokers, ou qualquer serviço que venda/\
   agregue dados pessoais de terceiros sem que a própria pessoa os tenha \
   publicado. Só valem fontes onde a PRÓPRIA pessoa divulgou o dado \
-  publicamente (rede social dela, site dela, perfil profissional dela).
+  publicamente (rede social dela, site dela, perfil profissional dela). \
+  (A única exceção no pipeline é a etapa dedicada verificar_telefone_decisor.py, \
+  que usa o Sherlocker de forma controlada e auditável para confirmar \
+  titularidade de telefone — isso NÃO abre exceção para você, agente de \
+  busca livre, usar esse tipo de fonte.)
 - Se nenhum decisor foi indicado no contexto, deixe linkedin_decisor e \
   telefone_decisor_ia vazios.
 - Em fonte_ia, cite APENAS URLs que realmente vieram dos resultados de \
