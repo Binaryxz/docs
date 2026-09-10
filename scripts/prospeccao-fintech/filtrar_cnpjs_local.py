@@ -55,21 +55,25 @@ import unicodedata
 import zipfile
 from typing import Iterable, Iterator
 
+# Peso 2 (principal/financeiro/core) vs. peso 1 (auxiliar/genérico: software
+# sob encomenda/licenciado e "outras atividades de serviços prestados às
+# empresas" — sinalizam tecnologia/B2B em geral, não necessariamente fintech).
 CNAES_ALVO = {
-    "7490104",  # Principal: intermediação e agenciamento de serviços e negócios em geral
-    "6203100",  # Desenvolvimento e licenciamento de programas de computador não-customizáveis
-    "6201501",  # Desenvolvimento de programas de computador sob encomenda
-    "8299799",  # Outras atividades de serviços prestados às empresas
-    "6209100",  # Suporte técnico, manutenção e outros serviços em TI
-    "6619399",  # Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente
-    "6619302",  # Correspondentes de instituições financeiras
-    "8291100",  # Atividades de cobranças e informações cadastrais
-    "6461100",  # Holdings de instituições financeiras
-    "6492100",  # Securitização de créditos
-    "6619305",  # Operadoras de cartões de débito
-    "6619306",  # Casas de câmbio
-    "6612603",  # Corretoras de câmbio
+    "7490104": 2,  # Principal: intermediação e agenciamento de serviços e negócios em geral
+    "6619302": 2,  # Principal: correspondentes de instituições financeiras
+    "6619399": 2,  # Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente
+    "8291100": 2,  # Atividades de cobranças e informações cadastrais
+    "6461100": 2,  # Holdings de instituições financeiras
+    "6492100": 2,  # Securitização de créditos
+    "6619305": 2,  # Operadoras de cartões de débito
+    "6619306": 2,  # Casas de câmbio
+    "6612603": 2,  # Corretoras de câmbio
+    "6209100": 2,  # Suporte técnico, manutenção e outros serviços em TI
+    "6203100": 1,  # Desenvolvimento e licenciamento de programas de computador não-customizáveis
+    "6201501": 1,  # Desenvolvimento de programas de computador sob encomenda
+    "8299799": 1,  # Outras atividades de serviços prestados às empresas
 }
+PESO_TOTAL_ALVO = sum(CNAES_ALVO.values())
 LIMIAR_PADRAO = 0.6
 
 # Editável: termos comuns em razão social / nome fantasia de fintechs
@@ -166,8 +170,9 @@ def percentual_cnae(principal: str, secundaria: str) -> tuple[float, int]:
         todos.add(principal.strip())
     if secundaria:
         todos.update(s.strip() for s in secundaria.split(",") if s.strip())
-    qtd = len(todos & CNAES_ALVO)
-    return qtd / len(CNAES_ALVO), qtd
+    encontrados = todos & CNAES_ALVO.keys()
+    peso_encontrado = sum(CNAES_ALVO[c] for c in encontrados)
+    return peso_encontrado / PESO_TOTAL_ALVO, len(encontrados)
 
 
 def _linhas_de_bufferedreader(f_bin, campos_padrao: list[str]) -> Iterator[dict]:

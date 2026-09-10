@@ -32,35 +32,42 @@ Fonte: [Base dos Dados](https://basedosdados.org), que replica os arquivos públ
 
 ### CNAEs alvo
 
-| Tipo | Código | Descrição |
-|---|---|---|
-| Principal | 74.90-1-04 | Intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários |
-| Secundário | 62.03-1-00 | Desenvolvimento e licenciamento de programas de computador não-customizáveis |
-| Secundário | 62.01-5-01 | Desenvolvimento de programas de computador sob encomenda |
-| Secundário | 82.99-7-99 | Outras atividades de serviços prestados às empresas |
-| Secundário | 62.09-1-00 | Suporte técnico, manutenção e outros serviços em TI |
-| Secundário | 66.19-3-99 | Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente |
-| Secundário | 66.19-3-02 | Correspondentes de instituições financeiras |
-| Secundário | 82.91-1-00 | Atividades de cobranças e informações cadastrais |
-| Secundário | 64.61-1-00 | Holdings de instituições financeiras |
-| Secundário | 64.92-1-00 | Securitização de créditos |
-| Secundário | 66.19-3-05 | Operadoras de cartões de débito |
-| Secundário | 66.19-3-06 | Casas de câmbio |
-| Secundário | 66.12-6-03 | Corretoras de câmbio |
+Cada CNAE tem um peso: **2** para os de atividade financeira (incluindo os dois principais) e o de suporte técnico em TI, **1** para os de desenvolvimento de software e "outras atividades de serviços prestados às empresas" — esses três sinalizam tecnologia/B2B em geral, não necessariamente fintech, então pesam menos na análise.
+
+| Tipo | Código | Descrição | Peso |
+|---|---|---|---|
+| Principal | 74.90-1-04 | Intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários | 2 |
+| Principal | 66.19-3-02 | Correspondentes de instituições financeiras | 2 |
+| Secundário | 66.19-3-99 | Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente | 2 |
+| Secundário | 82.91-1-00 | Atividades de cobranças e informações cadastrais | 2 |
+| Secundário | 64.61-1-00 | Holdings de instituições financeiras | 2 |
+| Secundário | 64.92-1-00 | Securitização de créditos | 2 |
+| Secundário | 66.19-3-05 | Operadoras de cartões de débito | 2 |
+| Secundário | 66.19-3-06 | Casas de câmbio | 2 |
+| Secundário | 66.12-6-03 | Corretoras de câmbio | 2 |
+| Secundário | 62.09-1-00 | Suporte técnico, manutenção e outros serviços em TI | 2 |
+| Secundário | 62.03-1-00 | Desenvolvimento e licenciamento de programas de computador não-customizáveis | 1 |
+| Secundário | 62.01-5-01 | Desenvolvimento de programas de computador sob encomenda | 1 |
+| Secundário | 82.99-7-99 | Outras atividades de serviços prestados às empresas | 1 |
 
 ### Regra do filtro
 
 Um CNPJ entra na lista quando:
 
-- **pelo menos 60% dos 13 CNAEs acima** (ou seja, 8 de 13) estão registrados nele, entre CNAE principal e secundários; **ou**
+- **a soma de pesos dos CNAEs acima que ele tem** (CNAE principal + secundários) é **pelo menos 60% da soma total de pesos** (23 no total: 10 códigos de peso 2 + 3 de peso 1 → precisa de pelo menos 14 pontos); **ou**
 - a razão social ou o nome fantasia contém "fintech".
 
 ```sql filtro_cnae.sql
-DECLARE cnaes_alvo ARRAY<STRING> DEFAULT [
-  '7490104', '6203100', '6201501', '8299799', '6209100',
-  '6619399', '6619302', '8291100',
-  '6461100', '6492100', '6619305', '6619306', '6612603'
+DECLARE cnaes_alvo ARRAY<STRUCT<codigo STRING, peso INT64>> DEFAULT [
+  STRUCT('7490104' AS codigo, 2 AS peso), STRUCT('6619302' AS codigo, 2 AS peso),
+  STRUCT('6619399' AS codigo, 2 AS peso), STRUCT('8291100' AS codigo, 2 AS peso),
+  STRUCT('6461100' AS codigo, 2 AS peso), STRUCT('6492100' AS codigo, 2 AS peso),
+  STRUCT('6619305' AS codigo, 2 AS peso), STRUCT('6619306' AS codigo, 2 AS peso),
+  STRUCT('6612603' AS codigo, 2 AS peso), STRUCT('6209100' AS codigo, 2 AS peso),
+  STRUCT('6203100' AS codigo, 1 AS peso), STRUCT('6201501' AS codigo, 1 AS peso),
+  STRUCT('8299799' AS codigo, 1 AS peso)
 ];
+DECLARE peso_total_alvo INT64 DEFAULT (SELECT SUM(peso) FROM UNNEST(cnaes_alvo));
 DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
 
 -- query completa em scripts/prospeccao-fintech/filtro_cnae.sql
@@ -69,7 +76,7 @@ DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
 Rode a query completa e salve o resultado em uma tabela (ex.: `meu_projeto.prospeccao.leads_filtrados`) — ela será a entrada da etapa 2.
 
 <Tip>
-  Ajuste o limiar (`limiar_percentual`) ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
+  Ajuste o limiar (`limiar_percentual`), os pesos ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
 </Tip>
 
 ### Alternativa sem BigQuery: `filtrar_cnpjs_local.py`
