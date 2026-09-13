@@ -28,16 +28,19 @@
 DECLARE ano_referencia INT64 DEFAULT 2026;  -- <- preencha com o resultado de descobrir_periodo.sql
 DECLARE mes_referencia INT64 DEFAULT 1;     -- <- idem
 
+-- ICP: contadores/escritórios de contabilidade (CNAE 69.20-6, CONCLA/IBGE,
+-- validado em 2026-09). As duas únicas subclasses dessa classe — sem CNAE
+-- auxiliar/genérico, pesam igual (mesmos valores de config.py).
 DECLARE cnaes_alvo ARRAY<STRUCT<codigo STRING, peso INT64>> DEFAULT [
-  -- EXEMPLO — substitua pela lista real de CNAEs do ICP deste cliente
-  -- (mesmos códigos/pesos de CNAES_ALVO em config.py).
-  STRUCT('6201501' AS codigo, 2 AS peso),
-  STRUCT('6202300' AS codigo, 1 AS peso)
+  STRUCT('6920601' AS codigo, 2 AS peso), -- Atividades de contabilidade
+  STRUCT('6920602' AS codigo, 2 AS peso)  -- Atividades de consultoria e auditoria contábil e tributária
 ];
-DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;         -- = LIMIAR_PERCENTUAL
-DECLARE capital_social_max FLOAT64 DEFAULT 5000000.0;  -- = CAPITAL_SOCIAL_MAX (NULL = sem teto)
+-- 0.5 (não 0.6): com só 2 CNAEs de peso igual, um escritório real costuma
+-- declarar SÓ UM dos dois como principal — precisa entrar com só 1 match.
+DECLARE limiar_percentual FLOAT64 DEFAULT 0.5;          -- = LIMIAR_PERCENTUAL
+DECLARE capital_social_max FLOAT64 DEFAULT NULL;        -- = CAPITAL_SOCIAL_MAX (sem teto — contadores de qualquer porte)
 DECLARE portes_alvo ARRAY<STRING> DEFAULT [];           -- = PORTES_ALVO (vazio = não filtra; códigos: 1=Micro,3=Pequena,5=Demais)
-DECLARE palavras_chave_nome ARRAY<STRING> DEFAULT [];  -- = PALAVRAS_CHAVE_NOME (vazio = não usa)
+DECLARE palavras_chave_nome ARRAY<STRING> DEFAULT [];   -- = PALAVRAS_CHAVE_NOME (vazio — CNAE já é 100% específico do setor)
 -- ==========================================================================
 
 DECLARE peso_total_alvo INT64 DEFAULT (SELECT SUM(peso) FROM UNNEST(cnaes_alvo));
