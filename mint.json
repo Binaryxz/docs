@@ -69,6 +69,12 @@
       ]
     },
     {
+      "group": "Guides",
+      "pages": [
+        "guides/prospeccao-cnpj"
+      ]
+    },
+    {
       "group": "API Documentation",
       "pages": [
         "api-reference/introduction"
