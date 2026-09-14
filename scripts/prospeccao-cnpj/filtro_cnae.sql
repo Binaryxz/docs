@@ -42,6 +42,9 @@ DECLARE capital_social_max FLOAT64 DEFAULT NULL;        -- = CAPITAL_SOCIAL_MAX 
 DECLARE portes_alvo ARRAY<STRING> DEFAULT [];           -- = PORTES_ALVO (vazio = não filtra; códigos: 1=Micro,3=Pequena,5=Demais)
 DECLARE palavras_chave_nome ARRAY<STRING> DEFAULT [];   -- = PALAVRAS_CHAVE_NOME (vazio — CNAE já é 100% específico do setor)
 -- ==========================================================================
+-- Lote piloto: BigQuery não aceita variável no LIMIT (só literal), por isso
+-- o "500" está direto na cláusula LIMIT no final da query, não aqui em cima
+-- — pra pegar a base inteira depois de validar a amostra, edite ali.
 
 DECLARE peso_total_alvo INT64 DEFAULT (SELECT SUM(peso) FROM UNNEST(cnaes_alvo));
 
@@ -135,4 +138,12 @@ JOIN `basedosdados.br_me_cnpj.empresas` AS emp
   ON emp.cnpj_basico = c.cnpj_basico
  AND emp.ano = ano_referencia
  AND emp.mes = mes_referencia
-ORDER BY c.percentual_match_cnae DESC;
+-- Prioriza quem já tem telefone/e-mail declarado (lote piloto é mais útil
+-- assim), depois quem bate os dois CNAEs (consultoria+auditoria, não só
+-- contabilidade básica), depois capital social maior.
+ORDER BY
+  (c.telefone_1 IS NOT NULL AND c.telefone_1 != '') DESC,
+  (c.email IS NOT NULL AND c.email != '') DESC,
+  c.percentual_match_cnae DESC,
+  emp.capital_social DESC
+LIMIT 500; -- lote piloto — comente esta linha (ou aumente o número) pra rodar a base inteira
