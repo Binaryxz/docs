@@ -1,0 +1,156 @@
+---
+title: 'Integração com o CNJ (DataJud)'
+description: 'Como consultar processos de todos os tribunais do Brasil pela API pública do CNJ e montar um feed unificado'
+---
+
+<Note>
+  O CNJ não expõe uma API de "processos do Brasil" única. A API pública é a
+  **DataJud**, e ela é dividida **por tribunal** (um endpoint por TJ, TRF,
+  TRT etc.). Um feed nacional é algo que você constrói no seu lado,
+  agregando as respostas de vários tribunais — o CNJ não entrega isso pronto.
+</Note>
+
+## O que é a API pública do DataJud
+
+A DataJud é a base nacional de metadados processuais mantida pelo CNJ. A API
+pública expõe, para cada tribunal, um endpoint de busca no formato:
+
+```
+https://api-publica.datajud.cnj.jus.br/api_publica_{alias_do_tribunal}/_search
+```
+
+Alguns exemplos de alias: `tjsp` (TJSP), `trf1` (TRF1), `trt2` (TRT2),
+`stj` (STJ). A lista completa de aliases e a chave pública de acesso ficam no
+[Manual da API Pública do DataJud](https://datajud-wiki.cnj.jus.br/api-publica/).
+
+<Warning>
+  A chave de API pública do DataJud é divulgada pelo próprio CNJ no manual
+  acima e pode ser rotacionada por eles sem aviso prévio. Não hardcode a
+  chave no seu repositório — guarde-a em variável de ambiente e trate-a como
+  configuração, não como segredo de longo prazo seu.
+</Warning>
+
+Cada endpoint segue a sintaxe de busca do Elasticsearch (`_search` com um
+corpo `query`/`sort`/`size`/`search_after`), não uma listagem simples com
+`GET /processos`.
+
+## Por que não existe "todos os processos de uma vez"
+
+Antes de implementar, vale alinhar expectativa:
+
+- **Volume**: são centenas de milhões de processos ativos no país. Não há
+  paginação que traga "tudo" de forma prática nem sentido em tentar.
+- **Sem endpoint agregador**: você precisa disparar uma consulta por
+  tribunal e juntar os resultados no seu lado.
+- **Sem push/webhook**: a API é só consulta (pull). Um "feed em tempo real"
+  na prática é *polling* periódico com deduplicação, não um streaming nativo.
+- **Segredo de justiça**: processos em sigilo não retornam dados completos
+  (ou não retornam) — trate esse caso, não assuma que todo processo é público.
+
+Dado isso, o "feed" viável é: escolher um recorte (grau de justiça, classe
+processual, tribunal, data de ajuizamento/movimentação), consultar os
+tribunais relevantes em paralelo, mesclar por data e paginar com
+`search_after`.
+
+## Autenticação
+
+Cada requisição usa a chave pública como Bearer token:
+
+```bash
+curl -X POST \
+  'https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search' \
+  -H 'Authorization: APIKey <CHAVE_PUBLICA_DO_MANUAL>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "size": 20,
+    "sort": [{ "dataAjuizamento": "desc" }]
+  }'
+```
+
+## Consultando um tribunal
+
+```javascript
+async function buscarProcessos(tribunalAlias, { size = 20, searchAfter } = {}) {
+  const body = {
+    size,
+    sort: [{ dataAjuizamento: 'desc' }, { numeroProcesso: 'desc' }],
+    ...(searchAfter ? { search_after: searchAfter } : {}),
+  };
+
+  const res = await fetch(
+    `https://api-publica.datajud.cnj.jus.br/api_publica_${tribunalAlias}/_search`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `APIKey ${process.env.DATAJUD_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`DataJud ${tribunalAlias} respondeu ${res.status}`);
+  }
+
+  const json = await res.json();
+  return json.hits.hits.map((hit) => hit._source);
+}
+```
+
+## Montando um feed multi-tribunal
+
+Um "feed" aqui é a agregação client-side dos resultados de vários
+tribunais, ordenados por data e reconsultados periodicamente. O ponto
+importante é respeitar o rate limit do CNJ (a chave pública é compartilhada
+por todos os consumidores) — por isso o intervalo entre execuções e o
+`Promise.allSettled` para não derrubar o feed se um tribunal estiver fora.
+
+```javascript
+const TRIBUNAIS = ['tjsp', 'trf1', 'trt2', 'stj'];
+
+async function coletarFeed() {
+  const resultados = await Promise.allSettled(
+    TRIBUNAIS.map((alias) => buscarProcessos(alias, { size: 20 }))
+  );
+
+  return resultados
+    .flatMap((r, i) =>
+      r.status === 'fulfilled'
+        ? r.value.map((processo) => ({ tribunal: TRIBUNAIS[i], ...processo }))
+        : []
+    )
+    .sort((a, b) => new Date(b.dataAjuizamento) - new Date(a.dataAjuizamento));
+}
+```
+
+Para "novidades" (o efeito de feed em tempo real), faça polling guardando o
+maior `dataAjuizamento`/`numeroProcesso` já visto por tribunal e use-o como
+filtro (`search_after` ou uma cláusula `range` na query) na próxima chamada,
+em vez de reprocessar tudo a cada execução.
+
+<Warning>
+  Respeite o limite de requisições da API pública (documentado no manual do
+  DataJud) e adicione backoff exponencial em caso de `429`. Consultar todos
+  os tribunais em paralelo e em alta frequência é o jeito mais rápido de ser
+  bloqueado.
+</Warning>
+
+## Próximos passos
+
+<CardGroup cols={2}>
+  <Card
+    title="Manual da API Pública do DataJud"
+    icon="book"
+    href="https://datajud-wiki.cnj.jus.br/api-publica/"
+  >
+    Lista de aliases de tribunais, campos disponíveis e a chave pública atual
+  </Card>
+  <Card
+    title="Sintaxe de busca do Elasticsearch"
+    icon="magnifying-glass"
+    href="https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html"
+  >
+    Referência da linguagem de query usada em todos os endpoints do DataJud
+  </Card>
+</CardGroup>

@@ -75,6 +75,12 @@
       ]
     },
     {
+      "group": "Integrações",
+      "pages": [
+        "integrations/cnj-datajud"
+      ]
+    },
+    {
       "group": "Endpoint Examples",
       "pages": [
         "api-reference/endpoint/get",
