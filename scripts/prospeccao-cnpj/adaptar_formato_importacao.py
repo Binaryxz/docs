@@ -108,8 +108,11 @@ def main(leads_path: str, enriquecidos_path: str, output_path: str, fonte_origin
         fallback = fallback_por_cnpj.get(cnpj, {})
 
         telefone_receita = normaliza_telefone(texto(row.get("ddd_1")) + texto(row.get("telefone_1")))
+        # whatsapp_publico primeiro: pra este cliente o canal de disparo é
+        # WhatsApp, não um telefone comercial genérico (que pode não atender
+        # por WhatsApp) — só cai pros outros candidatos se não achou WhatsApp.
         telefone = ""
-        for candidato in [row.get("telefone_comercial_ia"), row.get("whatsapp_publico"), fallback.get("telefone"), telefone_receita]:
+        for candidato in [row.get("whatsapp_publico"), row.get("telefone_comercial_ia"), fallback.get("telefone"), telefone_receita]:
             candidato = texto(candidato)
             telefone = normaliza_telefone(candidato) if candidato else ""
             if telefone:

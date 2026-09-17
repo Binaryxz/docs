@@ -87,6 +87,18 @@ python build_planilha_final.py leads_com_socios.csv leads_enriquecidos.csv plani
 python adaptar_formato_importacao.py leads_com_socios.csv leads_enriquecidos.csv saida_importacao.csv
 ```
 
+## Preferências deste cliente (contadores)
+
+- **O entregável final é sempre `adaptar_formato_importacao.py`** — exatamente
+  as 6 colunas `nome, primeiro_nome, telefone, email, regiao, valor`, nunca
+  colunas extras. Se precisar de uma coluna informativa (ex.: indicador de
+  WhatsApp confirmado) pra revisar antes de entregar, gere um arquivo
+  separado — não altere o formato do arquivo final.
+- **WhatsApp é o canal que importa, não LinkedIn.** A coluna `telefone` do
+  entregável final prioriza `whatsapp_publico` sobre um telefone comercial
+  genérico (`telefone_comercial_ia`) — ver ordem em
+  `adaptar_formato_importacao.py`.
+
 ## Lições já incorporadas (não repetir)
 
 - **Schema do `basedosdados.br_me_cnpj`**: tabelas são snapshots mensais —
