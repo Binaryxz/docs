@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+
+# Config por cliente (CNAEs/capital social/etc.) — nunca comitar, é
+# específico de cada cliente. Copie de config.example.py.
+scripts/prospeccao-cnpj/config.py
+
+# Saídas do pipeline (CSVs/XLSX de leads) e credenciais — dados sensíveis,
+# nunca comitar. A chave de service account do GCP deve ficar FORA do
+# repositório (ver README.md do pipeline) — isso aqui é só uma rede de
+# segurança caso alguém salve sem querer dentro da pasta do pipeline.
+scripts/prospeccao-cnpj/*.csv
+scripts/prospeccao-cnpj/*.xlsx
+scripts/prospeccao-cnpj/dados/
+scripts/prospeccao-cnpj/*-key.json
+scripts/prospeccao-cnpj/*credentials*.json
