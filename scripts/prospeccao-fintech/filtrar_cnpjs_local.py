@@ -74,7 +74,9 @@ CNAES_ALVO = {
     "8299799": 1,  # Outras atividades de serviços prestados às empresas
 }
 PESO_TOTAL_ALVO = sum(CNAES_ALVO.values())
-LIMIAR_PADRAO = 0.6
+# 60% tende a trazer só as empresas "mais puramente" fintech (poucos milhares
+# no universo nacional); 35% amplia bastante o volume sem perder relevância.
+LIMIAR_PADRAO = 0.35
 
 # Editável: termos comuns em razão social / nome fantasia de fintechs
 # brasileiras. Comparação é feita sem acento e em minúsculas (ver normaliza()) —
@@ -148,7 +150,8 @@ CAMPOS_SOCIOS = [
 COLUNAS_SAIDA = [
     "cnpj", "razao_social", "nome_fantasia", "percentual_match_cnae",
     "qtd_cnaes_alvo_encontrados", "motivo_match", "cnae_fiscal_principal",
-    "cnae_fiscal_secundaria", "data_inicio_atividade", "uf", "municipio",
+    "cnae_fiscal_secundaria", "data_inicio_atividade", "capital_social",
+    "uf", "municipio",
     "ddd_1", "telefone_1", "ddd_2", "telefone_2", "correio_eletronico",
     "nome_decisor", "documento_decisor", "qualificacao_socio", "eh_decisor",
     "data_entrada_sociedade",
@@ -268,9 +271,12 @@ def escanear_estabelecimentos(
     return accepted, estab_data
 
 
-def escanear_empresas(caminhos: list[str], accepted_estab_ids: set[str]) -> tuple[dict[str, str], set[str]]:
+def escanear_empresas(
+    caminhos: list[str], accepted_estab_ids: set[str]
+) -> tuple[dict[str, str], set[str], dict[str, float]]:
     razao_social_map: dict[str, str] = {}
     novos_via_razao_social: set[str] = set()
+    capital_social_map: dict[str, float] = {}
     for caminho in caminhos:
         for row in abrir_linhas(caminho, CAMPOS_EMPRESAS):
             cnpj_basico = (row.get("cnpj_basico") or "").strip()
@@ -282,7 +288,12 @@ def escanear_empresas(caminhos: list[str], accepted_estab_ids: set[str]) -> tupl
                 razao_social_map[cnpj_basico] = razao
                 if match_razao and cnpj_basico not in accepted_estab_ids:
                     novos_via_razao_social.add(cnpj_basico)
-    return razao_social_map, novos_via_razao_social
+                bruto = (row.get("capital_social") or "").strip().replace(",", ".")
+                try:
+                    capital_social_map[cnpj_basico] = float(bruto)
+                except ValueError:
+                    capital_social_map[cnpj_basico] = 0.0
+    return razao_social_map, novos_via_razao_social, capital_social_map
 
 
 def escanear_socios(caminhos: list[str], accepted_ids: set[str]) -> dict[str, dict]:
@@ -317,6 +328,7 @@ def main() -> None:
     parser.add_argument("--socios", nargs="+", default=None, help="Caminho(s)/padrão(ões) glob dos arquivos de Sócios (opcional)")
     parser.add_argument("--saida", required=True, help="CSV de saída (leads_com_socios.csv)")
     parser.add_argument("--limiar", type=float, default=LIMIAR_PADRAO, help=f"Percentual mínimo de CNAEs alvo (padrão {LIMIAR_PADRAO})")
+    parser.add_argument("--capital-maximo", type=float, default=None, help="Capital social máximo aceito (em R$); omitido = sem filtro")
     args = parser.parse_args()
 
     caminhos_estab = expandir(args.estabelecimentos)
@@ -332,7 +344,7 @@ def main() -> None:
     print(f"      {len(accepted)} CNPJs aceitos até aqui", file=sys.stderr)
 
     print(f"[2/4] escaneando {len(caminhos_emp)} arquivo(s) de empresas (razão social + join)...", file=sys.stderr)
-    razao_social_map, novos = escanear_empresas(caminhos_emp, accepted)
+    razao_social_map, novos, capital_social_map = escanear_empresas(caminhos_emp, accepted)
     if novos:
         print(f"      +{len(novos)} CNPJs novos via razão social — buscando dados de estabelecimento deles...", file=sys.stderr)
         _, estab_data_novos = escanear_estabelecimentos(caminhos_estab, args.limiar, ids_extra=novos)
@@ -344,6 +356,14 @@ def main() -> None:
     if ignorados:
         print(f"[aviso] {len(ignorados)} CNPJs aceitos não tinham registro correspondente em Empresas — ignorados", file=sys.stderr)
     print(f"      total de leads filtrados: {len(leads)}", file=sys.stderr)
+
+    if args.capital_maximo is not None:
+        antes = len(leads)
+        leads = {
+            cnpj_basico: dados for cnpj_basico, dados in leads.items()
+            if capital_social_map.get(cnpj_basico, 0.0) <= args.capital_maximo
+        }
+        print(f"      filtro de capital social (<= {args.capital_maximo:.2f}): {antes} -> {len(leads)}", file=sys.stderr)
 
     decisores: dict[str, dict] = {}
     if caminhos_soc:
@@ -370,6 +390,7 @@ def main() -> None:
                     "cnae_fiscal_principal": estab.get("cnae_fiscal_principal", ""),
                     "cnae_fiscal_secundaria": estab.get("cnae_fiscal_secundaria", ""),
                     "data_inicio_atividade": estab.get("data_inicio_atividade", ""),
+                    "capital_social": capital_social_map.get(cnpj_basico, ""),
                     "uf": estab.get("uf", ""),
                     "municipio": estab.get("municipio", ""),
                     "ddd_1": estab.get("ddd_1", ""),

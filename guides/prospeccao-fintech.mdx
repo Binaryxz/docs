@@ -8,7 +8,7 @@ icon: 'magnifying-glass'
 
 ```mermaid
 flowchart TD
-    A[Base CNPJ<br/>Receita Federal via BigQuery] --> B[1. Filtro<br/>>=60% dos CNAEs alvo OU nome de fintech]
+    A[Base CNPJ<br/>Receita Federal via BigQuery] --> B[1. Filtro<br/>>=35% dos CNAEs alvo OU nome de fintech<br/>+ capital social ate teto]
     B --> C[2. Dados cadastrais<br/>telefone/e-mail da Receita + sócios + decisor]
     C --> C2[2.5 opcional. Sherlocker<br/>confirma titular do telefone / CPF do decisor]
     C2 --> D[3. Agente de IA<br/>Gemini com busca nativa no Google]
@@ -55,8 +55,11 @@ Cada CNAE tem um peso: **2** para os de atividade financeira (incluindo os dois 
 
 Um CNPJ entra na lista quando:
 
-- **a soma de pesos dos CNAEs acima que ele tem** (CNAE principal + secundários) é **pelo menos 60% da soma total de pesos** (23 no total: 10 códigos de peso 2 + 3 de peso 1 → precisa de pelo menos 14 pontos); **ou**
-- a razão social ou o nome fantasia contém "fintech".
+- **a soma de pesos dos CNAEs acima que ele tem** (CNAE principal + secundários) é **pelo menos 35% da soma total de pesos** (23 no total: 10 códigos de peso 2 + 3 de peso 1 → precisa de pelo menos 9 pontos); **ou**
+- a razão social ou o nome fantasia contém "fintech";
+- **e**, em ambos os casos, o capital social não ultrapassa o teto definido (padrão R$5M) — foco em pequenas/médias empresas.
+
+60% traz só as empresas "mais puramente" fintech (poucos milhares no universo nacional); 35% amplia bastante o volume sem perder relevância — foi o que usamos na prática depois de comparar os dois.
 
 ```sql filtro_cnae.sql
 DECLARE cnaes_alvo ARRAY<STRUCT<codigo STRING, peso INT64>> DEFAULT [
@@ -69,30 +72,45 @@ DECLARE cnaes_alvo ARRAY<STRUCT<codigo STRING, peso INT64>> DEFAULT [
   STRUCT('8299799' AS codigo, 1 AS peso)
 ];
 DECLARE peso_total_alvo INT64 DEFAULT (SELECT SUM(peso) FROM UNNEST(cnaes_alvo));
-DECLARE limiar_percentual FLOAT64 DEFAULT 0.6;
+DECLARE limiar_percentual FLOAT64 DEFAULT 0.35;
+DECLARE capital_social_maximo FLOAT64 DEFAULT 5000000.0;
 
 -- query completa em scripts/prospeccao-fintech/filtro_cnae.sql
 ```
 
 Rode a query completa e salve o resultado em uma tabela (ex.: `meu_projeto.prospeccao.leads_filtrados`) — ela será a entrada da etapa 2.
 
+<Warning>
+  As tabelas do `basedosdados.br_me_cnpj` guardam um **snapshot mensal completo por período** (colunas `ano`/`mes`/`data`) — sem filtrar pelo período mais recente, a query escaneia todo o histórico (bilhões de linhas, centenas de GB). O script já busca o período mais atual dinamicamente (`ano_referencia`/`mes_referencia`), mas se for adaptar a query, nunca remova esse filtro. Também vale conferir sempre com uma amostra (`LIMIT 10`) o formato real de campos como `situacao_cadastral` — no BigQuery vem `'2'` (sem zero à esquerda), mas no arquivo **bruto** da Receita (usado por `filtrar_cnpjs_local.py`) o mesmo campo vem `'02'` (com zero à esquerda). São fontes diferentes do mesmo dado, com formatação diferente.
+</Warning>
+
 <Tip>
-  Ajuste o limiar (`limiar_percentual`), os pesos ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
+  Ajuste o limiar (`limiar_percentual`), o teto de capital social, os pesos ou a lista de CNAEs conforme o ICP mudar; nenhuma outra etapa do fluxo depende desses valores.
 </Tip>
 
-### Alternativa sem BigQuery: `filtrar_cnpjs_local.py`
+### Alternativa sem BigQuery (e com dado mais fresco): `filtrar_cnpjs_local.py`
 
-Se você não tem (ou não quer usar) um projeto Google Cloud, `scripts/prospeccao-fintech/filtrar_cnpjs_local.py` faz o mesmo filtro (etapas 1 e 2 juntas) rodando localmente sobre os [arquivos abertos de CNPJ da Receita Federal](https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/) — sem custo de API, só tempo de CPU. Além do match por CNAE, também casa uma lista mais ampla de palavras-chave (pagamento, pay, bank, banco, crédito, investimento, etc. — editável em `PALAVRAS_CHAVE_FINTECH` no topo do script) contra razão social e nome fantasia, não só a palavra "fintech" literal.
+Se você não tem (ou não quer usar) um projeto Google Cloud, ou quer dado mais atual que o snapshot do `basedosdados` (que pode ficar meses defasado), `scripts/prospeccao-fintech/filtrar_cnpjs_local.py` faz o mesmo filtro (etapas 1 e 2 juntas) rodando localmente sobre os [arquivos abertos de CNPJ da Receita Federal](https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/) — sem custo de API, só tempo de CPU. Além do match por CNAE, também casa uma lista mais ampla de palavras-chave (pagamento, pay, bank, banco, crédito, investimento, etc. — editável em `PALAVRAS_CHAVE_FINTECH` no topo do script) contra razão social e nome fantasia, não só a palavra "fintech" literal — isso costuma trazer bem mais volume que só o CNAE.
+
+<Warning>
+  O domínio oficial `arquivos.receitafederal.gov.br` costuma estar **bloqueado pra ambientes de nuvem/datacenter** (a Receita bloqueia essas faixas de IP). Se der resposta vazia/503 em todas as rotas, use o espelho da Casa dos Dados (atualizado mensalmente, via Cloudflare CDN, mesmo dado oficial):
+  `https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos/` — liste as pastas por data (`AAAA-MM-DD/`) e baixe a mais recente.
+</Warning>
 
 ```bash
 python scripts/prospeccao-fintech/filtrar_cnpjs_local.py \
-  --estabelecimentos "dados/*ESTABELE*" \
-  --empresas "dados/*EMPRECSV*" \
-  --socios "dados/*SOCIOCSV*" \
+  --estabelecimentos "dados/*stabelecimentos*.zip" \
+  --empresas "dados/*mpresas*.zip" \
+  --socios "dados/*ocios*.zip" \
+  --capital-maximo 5000000 \
   --saida leads_com_socios.csv
 ```
 
-Aceita tanto os arquivos originais da Receita (sem cabeçalho, `;`, Latin-1) quanto CSVs já com cabeçalho — detecta automaticamente. Processa por streaming (linha a linha, sem carregar os arquivos inteiros em memória), então funciona mesmo sobre a base nacional completa (dezenas de milhões de linhas), mas pode levar de minutos a horas dependendo do volume e do hardware.
+Aceita tanto os arquivos originais da Receita (sem cabeçalho, `;`, Latin-1) quanto CSVs já com cabeçalho — detecta automaticamente. Processa por streaming (linha a linha, sem carregar os arquivos inteiros em memória), então funciona mesmo sobre a base nacional completa (dezenas de milhões de linhas), mas pode levar de minutos a horas dependendo do volume e do hardware. `--capital-maximo` é opcional — omitido, não filtra por capital social.
+
+<Note>
+  O nome dos arquivos reais mudou ao longo do tempo (ex.: `Estabelecimentos0.zip` a `Estabelecimentos9.zip`, com maiúscula só na primeira letra) — os padrões glob são case-sensitive no Linux, então confira o nome real antes de rodar (`ls dados/`) em vez de assumir o padrão do exemplo acima.
+</Note>
 
 ## Etapa 2 — Dados cadastrais e decisor
 
