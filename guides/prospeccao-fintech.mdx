@@ -161,8 +161,34 @@ Duas coisas que o script trata automaticamente:
 - **Placeholder óbvio** (`99999999`, `00000000`, etc.): passa na validação estrutural do libphonenumber mas é sinalizado à parte como `suspeito_repetido`, não como `sim` puro.
 
 <Note>
-  Isso confirma só o **formato** — não confirma que a linha está ativa/em uso. Validação de "está realmente ativa" (ex.: Numverify, Twilio Lookup) tem custo por requisição e não está integrada aqui: o free tier típico (dezenas a centenas de consultas/mês) não cobre volumes de milhares de leads. Considere isso se o orçamento permitir.
+  Isso confirma só o **formato** — não confirma que a linha está ativa/em uso nem que tem WhatsApp. Pra isso, ver a Etapa 2.7 abaixo.
 </Note>
+
+## Etapa 2.7 — Confirmar se o número tem WhatsApp (grátis, sessão própria)
+
+Formato válido não significa WhatsApp ativo. `scripts/prospeccao-fintech/whatsapp-checker/checar_whatsapp.js` verifica isso usando a própria sessão do WhatsApp Web (biblioteca [Baileys](https://github.com/WhiskeySockets/Baileys)) — sem contratar API paga (Z-API, UltraMsg, Whapi etc.).
+
+**Como funciona:** não é a API oficial da Meta — é automação sobre o protocolo do WhatsApp Web, o mesmo mecanismo de quando você escaneia o QR code pra abrir o WhatsApp no navegador.
+
+```bash
+cd scripts/prospeccao-fintech/whatsapp-checker
+npm install
+node checar_whatsapp.js \
+  leads_com_telefone_validado.csv leads_com_whatsapp.csv \
+  --coluna-telefone telefone_e164
+```
+
+Na primeira execução aparece um QR code no terminal (e salvo em `qr.png`) — escaneie com **Configurações > Aparelhos conectados > Conectar aparelho** no WhatsApp do celular que vai ser usado pra checagem. A sessão fica salva em `./auth_info/` e não precisa escanear de novo nas próximas vezes.
+
+Adiciona `tem_whatsapp` (`sim`/`nao`/`erro`/`sem_numero`) e `whatsapp_jid`.
+
+<Warning>
+  Leia antes de rodar:
+  - **Use um chip/número secundário**, não o WhatsApp principal da empresa. Consultar volume alto de números em pouco tempo é um padrão que o WhatsApp pode identificar como automação e, em casos extremos, suspender o número usado pra checagem. O script já roda com delay (padrão 4s + jitter) entre consultas pra reduzir esse risco, mas ele não é zero — é o preço de não pagar por uma API terceira homologada.
+  - `./auth_info/` guarda as **credenciais da sessão** (equivale a estar logado no WhatsApp Web) — nunca commitar essa pasta (já está no `.gitignore` local).
+  - Rode isso num ambiente onde `./auth_info/` persiste entre execuções (sua máquina, não um container efêmero) — senão é preciso escanear o QR code toda vez.
+  - Grava o resultado incrementalmente (linha por linha) no CSV de saída, então dá pra interromper e retomar sem perder o que já foi checado.
+</Warning>
 
 ## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
 
