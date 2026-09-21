@@ -144,6 +144,26 @@ Adiciona ao CSV as colunas `titular_telefone_nome`, `titular_telefone_documento`
 
 Se você já tem um `telefone_decisor_sherlocker_1` confirmado, pode pular a busca do decisor na etapa 3 com `--pular-com-contato telefone_decisor_sherlocker_1` (mesma flag de `enrich_leads.py`/`agentic_enrich.py`), economizando chamadas de IA.
 
+## Etapa 2.6 — Validar formato do telefone (grátis, sem limite de volume)
+
+Antes de disparar, vale filtrar número claramente quebrado — evita gastar tempo/orçamento de disparo em contato que não funciona. `scripts/prospeccao-fintech/validar_telefone.py` usa a biblioteca `phonenumbers` (port do libphonenumber do Google) pra checar se o número tem formato válido no plano de numeração brasileiro — sem chave de API, sem limite de requisições.
+
+```bash
+python scripts/prospeccao-fintech/validar_telefone.py \
+  leads_com_socios.csv leads_com_telefone_validado.csv \
+  --coluna-ddd ddd_1 --coluna-numero telefone_1
+```
+
+Adiciona `telefone_formato_valido` (`sim` / `suspeito_repetido` / `nao` / `sem_numero`), `telefone_tipo` (`celular`/`fixo`/...), `telefone_e164` (formato internacional, pronto pra WhatsApp/discagem) e `telefone_9_adicionado`.
+
+Duas coisas que o script trata automaticamente:
+- **Celular pré-2012 sem o "9"**: muita empresa nunca atualizou o telefone cadastrado na Receita desde antes da expansão pra 9 dígitos — um número de 8 dígitos começando em 6-9 é reconhecido como esse caso e corrigido (`telefone_9_adicionado=sim`) antes de validar.
+- **Placeholder óbvio** (`99999999`, `00000000`, etc.): passa na validação estrutural do libphonenumber mas é sinalizado à parte como `suspeito_repetido`, não como `sim` puro.
+
+<Note>
+  Isso confirma só o **formato** — não confirma que a linha está ativa/em uso. Validação de "está realmente ativa" (ex.: Numverify, Twilio Lookup) tem custo por requisição e não está integrada aqui: o free tier típico (dezenas a centenas de consultas/mês) não cobre volumes de milhares de leads. Considere isso se o orçamento permitir.
+</Note>
+
 ## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
 
 Existem duas implementações, escolha conforme seu acesso:
