@@ -58,6 +58,12 @@
       ]
     },
     {
+      "group": "Guides",
+      "pages": [
+        "prospeccao-fintech/guia"
+      ]
+    },
+    {
       "group": "Essentials",
       "pages": [
         "essentials/markdown",
