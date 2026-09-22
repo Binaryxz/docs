@@ -28,7 +28,12 @@ Depois: `build_planilha_final.py` junta tudo numa planilha, e
 
 ## Passo a passo
 
+Todos os comandos abaixo assumem que você está dentro de `scripts/` (esta
+pasta fica em `prospeccao-cnpj/scripts/` na raiz do repositório).
+
 ```bash
+cd scripts
+
 # 0. Configure o ICP deste cliente
 cp config.example.py config.py
 $EDITOR config.py   # CNAES_ALVO, LIMIAR_PERCENTUAL, CAPITAL_SOCIAL_MAX, ...
@@ -53,7 +58,7 @@ pip install -r requirements.txt
 5. Rode `join_leads_socios.sql`, exporte o resultado como
    `leads_com_socios.csv`.
 
-Ver `../../guides/prospeccao-cnpj.mdx` para o setup completo de GCP/BigQuery
+Ver `guide.mdx` para o setup completo de GCP/BigQuery
 (roles de service account, cota gratuita, etc.) e as armadilhas de schema já
 mapeadas (snapshots mensais, nomes de coluna, CPF mascarado).
 
@@ -122,4 +127,4 @@ python adaptar_formato_importacao.py leads_com_socios.csv leads_enriquecidos.csv
   variável de ambiente, nunca no código ou versionadas.
 
 Detalhes completos (setup de GCP passo a passo, roles necessárias, etc.) em
-`../../guides/prospeccao-cnpj.mdx`.
+`guide.mdx`.

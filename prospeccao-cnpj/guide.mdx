@@ -16,7 +16,7 @@ flowchart TD
 ```
 
 Os scripts completos deste guia estão em
-[`/scripts/prospeccao-cnpj`](https://github.com/binaryxz/docs/tree/main/scripts/prospeccao-cnpj)
+[`/prospeccao-cnpj/scripts`](https://github.com/binaryxz/docs/tree/main/prospeccao-cnpj/scripts)
 neste repositório. Esse diretório é **genérico** — o CNAE alvo, o teto de
 capital social e as demais regras de negócio ficam num único arquivo,
 `config.py` (copiado de `config.example.py`), para replicar o pipeline em
@@ -37,7 +37,7 @@ outro cliente sem tocar no resto do código.
   processados localmente (sem GCP).
 - Uma chave de API do Gemini (`GEMINI_API_KEY`) para a etapa 5, opção A.
 - Python 3.10+ com as dependências de
-  `scripts/prospeccao-cnpj/requirements.txt`.
+  `prospeccao-cnpj/scripts/requirements.txt`.
 
 ### Setup do Google Cloud / BigQuery
 
@@ -70,7 +70,7 @@ outro cliente sem tocar no resto do código.
 ## Configuração do ICP (config.py)
 
 ```bash
-cd scripts/prospeccao-cnpj
+cd prospeccao-cnpj/scripts
 cp config.example.py config.py
 ```
 
@@ -149,7 +149,7 @@ Um CNPJ entra no resultado quando:
   configurado) e o porte está em `PORTES_ALVO` (se configurado).
 
 ```sql filtro_cnae.sql
--- query completa em scripts/prospeccao-cnpj/filtro_cnae.sql
+-- query completa em prospeccao-cnpj/scripts/filtro_cnae.sql
 ```
 
 Rode a query completa e salve o resultado em uma tabela (ex.:
@@ -158,7 +158,7 @@ Rode a query completa e salve o resultado em uma tabela (ex.:
 ### Alternativa sem BigQuery: `filtrar_cnpjs_local.py`
 
 Se você não tem (ou não quer usar) um projeto Google Cloud,
-`scripts/prospeccao-cnpj/filtrar_cnpjs_local.py` faz o mesmo filtro (etapas
+`prospeccao-cnpj/scripts/filtrar_cnpjs_local.py` faz o mesmo filtro (etapas
 1-3 juntas, incluindo decisor) rodando localmente sobre os
 [arquivos abertos de CNPJ da Receita Federal](https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/)
 — sem custo de API, só tempo de CPU. Lê `CNAES_ALVO`/`LIMIAR_PERCENTUAL`/
@@ -174,7 +174,7 @@ Se você não tem (ou não quer usar) um projeto Google Cloud,
 </Note>
 
 ```bash
-python scripts/prospeccao-cnpj/filtrar_cnpjs_local.py \
+python prospeccao-cnpj/scripts/filtrar_cnpjs_local.py \
   --estabelecimentos "dados/*ESTABELE*" \
   --empresas "dados/*EMPRECSV*" \
   --socios "dados/*SOCIOCSV*" \
@@ -198,10 +198,10 @@ Para sócios e decisor, cruzamos com a base de Sócios e priorizamos quem
 tem qualificação de administração/direção (Administrador,
 Sócio-Administrador, Diretor, Presidente); na ausência de um cargo desses,
 usamos o sócio mais antigo cadastrado. Veja
-`scripts/prospeccao-cnpj/socios_decisor.sql`.
+`prospeccao-cnpj/scripts/socios_decisor.sql`.
 
 Depois de salvar os resultados de `filtro_cnae.sql` e `socios_decisor.sql`
-em tabelas, junte os dois com `scripts/prospeccao-cnpj/join_leads_socios.sql`
+em tabelas, junte os dois com `prospeccao-cnpj/scripts/join_leads_socios.sql`
 (LEFT JOIN por `cnpj_basico`) e exporte o resultado como
 `leads_com_socios.csv` — é esse arquivo que alimenta a etapa 4 (ou, se você
 pular essa etapa, diretamente a etapa 5.
@@ -221,7 +221,7 @@ pular essa etapa, diretamente a etapa 5.
   pessoa fora deste fluxo.
 </Warning>
 
-`scripts/prospeccao-cnpj/verificar_telefone_decisor.py` usa a API REST do
+`prospeccao-cnpj/scripts/verificar_telefone_decisor.py` usa a API REST do
 [Sherlocker](https://docs.sherlocker.com.br) (não o servidor MCP — que é
 voltado a clientes interativos como Claude Desktop/Cursor, não a scripts em
 lote) para, por lead:
@@ -249,7 +249,7 @@ lote) para, por lead:
 
 ```bash
 export SHERLOCKER_API_KEY="sua-chave"  # nunca no código — só variável de ambiente
-python scripts/prospeccao-cnpj/verificar_telefone_decisor.py \
+python prospeccao-cnpj/scripts/verificar_telefone_decisor.py \
   leads_com_socios.csv leads_com_telefone_decisor.csv
 ```
 
@@ -305,8 +305,8 @@ telefone só se estiver publicamente associado a essa pessoa) quando
 
 ```bash
 export GEMINI_API_KEY="sua-chave"
-pip install -r scripts/prospeccao-cnpj/requirements.txt
-python scripts/prospeccao-cnpj/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
+pip install -r prospeccao-cnpj/scripts/requirements.txt
+python prospeccao-cnpj/scripts/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
 ```
 
 <Tip>
@@ -336,8 +336,8 @@ termos, dentro de um orçamento máximo por empresa.
 ```bash
 export GEMINI_API_KEY="sua-chave"      # grátis, sem billing (não usa grounding nativo)
 export BRAVE_API_KEY="sua-chave-brave" # a conta usada aqui costuma ser billing por unidades pré-pagas — confira saldo
-pip install -r scripts/prospeccao-cnpj/requirements.txt
-python scripts/prospeccao-cnpj/agentic_enrich.py leads_com_socios.csv leads_enriquecidos.csv
+pip install -r prospeccao-cnpj/scripts/requirements.txt
+python prospeccao-cnpj/scripts/agentic_enrich.py leads_com_socios.csv leads_enriquecidos.csv
 ```
 
 ### Opção C — Só Brave Search, sem LLM (mais barata)
@@ -358,7 +358,7 @@ filtrar por porte via faixa de funcionários do LinkedIn.
 
 ```bash
 export BRAVE_API_KEY="sua-chave"
-python scripts/prospeccao-cnpj/enrich_leads_gratis.py leads_com_socios.csv leads_enriquecidos.csv
+python prospeccao-cnpj/scripts/enrich_leads_gratis.py leads_com_socios.csv leads_enriquecidos.csv
 ```
 
 Todas as opções gravam incrementalmente (`flush` a cada linha) e pulam
@@ -368,7 +368,7 @@ saída — uma falha no meio não perde o progresso.
 ## Planilha final
 
 ```bash
-python scripts/prospeccao-cnpj/build_planilha_final.py \
+python prospeccao-cnpj/scripts/build_planilha_final.py \
   leads_com_socios.csv leads_enriquecidos.csv planilha_final.xlsx
 ```
 
@@ -385,7 +385,7 @@ remapeia a saída do pipeline para esse formato — por padrão, colunas
 `nome, primeiro_nome, telefone, email, regiao, valor`:
 
 ```bash
-python scripts/prospeccao-cnpj/adaptar_formato_importacao.py \
+python prospeccao-cnpj/scripts/adaptar_formato_importacao.py \
   leads_com_socios.csv leads_enriquecidos.csv saida_importacao.csv \
   --fonte-original base_original.xlsx
 ```
