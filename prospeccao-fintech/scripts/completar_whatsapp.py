@@ -5,20 +5,27 @@ script:
 
   1. Checa se o telefone que já temos tem WhatsApp (via servidor_whatsapp.js,
      que precisa estar rodando — ver prospeccao-fintech/scripts/whatsapp-checker/).
-  2. Se NÃO tiver, busca na internet (Brave Search) um telefone alternativo
-     ligado ao NOME DO DECISOR — link direto de WhatsApp (wa.me/api.whatsapp.com)
-     em bio de Instagram/Linktree/site pessoal, ou telefone comercial da
-     empresa mencionando o decisor.
+  2. Se NÃO tiver, busca na internet um telefone alternativo ligado ao NOME
+     DO DECISOR — link direto de WhatsApp (wa.me/api.whatsapp.com) em bio de
+     Instagram/Linktree/site pessoal, ou telefone comercial da empresa
+     mencionando o decisor.
   3. Checa WhatsApp nesse número alternativo também.
   4. Marca o resultado final e, com --somente-com-whatsapp, filtra a saída
      pra só quem tem WhatsApp confirmado em algum dos dois — é o "fazer o
      filtro" que fecha o funil de verdade.
 
+Busca na internet — dois provedores suportados (usa o que tiver chave
+configurada; se os dois estiverem, prefere Tavily):
+  - Tavily (recomendado, genuinamente grátis): 1.000 buscas/mês, sem cartão.
+    Cadastro em https://tavily.com -> export TAVILY_API_KEY="sua-chave"
+  - Brave Search: perdeu o tier grátis em fev/2026 (agora é crédito pago).
+    export BRAVE_API_KEY="sua-chave"
+
 Pré-requisitos:
   1. Rodar `node servidor_whatsapp.js` em prospeccao-fintech/scripts/whatsapp-checker/
      (escanear o QR code lá, com um chip secundário — mesmos avisos de sempre)
      e deixar rodando.
-  2. export BRAVE_API_KEY="sua-chave"
+  2. export TAVILY_API_KEY="sua-chave"   (ou BRAVE_API_KEY, ver acima)
 
 Uso:
     python completar_whatsapp.py leads.csv leads_com_whatsapp.csv \
@@ -39,6 +46,7 @@ import urllib.parse
 import requests
 
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+TAVILY_ENDPOINT = "https://api.tavily.com/search"
 SECONDS_BETWEEN_BRAVE_CALLS = 1.0
 
 REGEX_WHATSAPP_LINK = re.compile(r"(?:wa\.me/\+?|api\.whatsapp\.com/send\?phone=\+?)(\d{10,13})")
@@ -90,6 +98,21 @@ def normaliza_para_e164(numero_bruto: str) -> str:
     return digitos
 
 
+def tavily_search(query: str, api_key: str, count: int = 5) -> list[dict]:
+    resp = requests.post(
+        TAVILY_ENDPOINT,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"query": query, "max_results": count},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return [
+        {"titulo": i.get("title", ""), "url": i.get("url", ""), "resumo": i.get("content", "")}
+        for i in data.get("results", [])[:count]
+    ]
+
+
 def brave_search(query: str, api_key: str, count: int = 5) -> list[dict]:
     resp = requests.get(
         BRAVE_ENDPOINT,
@@ -103,6 +126,17 @@ def brave_search(query: str, api_key: str, count: int = 5) -> list[dict]:
         {"titulo": i.get("title", ""), "url": i.get("url", ""), "resumo": i.get("description", "")}
         for i in data.get("web", {}).get("results", [])[:count]
     ]
+
+
+def web_search(query: str, tavily_api_key: str | None, brave_api_key: str | None, count: int = 5) -> list[dict]:
+    """Usa Tavily se tiver chave (genuinamente grátis, sem cartão); cai pro
+    Brave só se for a única chave configurada (perdeu o tier grátis em
+    fev/2026, agora consome crédito pago)."""
+    if tavily_api_key:
+        return tavily_search(query, tavily_api_key, count)
+    if brave_api_key:
+        return brave_search(query, brave_api_key, count)
+    return []
 
 
 def candidatos_whatsapp_pessoal(resultados: list[dict], nome_decisor: str) -> list[str]:
@@ -154,7 +188,7 @@ def checa_whatsapp(servidor_url: str, numero_e164: str) -> dict:
         return {"tem_whatsapp": "erro", "whatsapp_jid": "", "erro": f"servidor_whatsapp_inacessivel: {exc}"}
 
 
-def processa_lead(lead: dict, coluna_telefone: str, servidor_url: str, brave_api_key: str | None) -> dict:
+def processa_lead(lead: dict, coluna_telefone: str, servidor_url: str, tavily_api_key: str | None, brave_api_key: str | None) -> dict:
     telefone_original = normaliza_para_e164(lead.get(coluna_telefone, ""))
     r_original = checa_whatsapp(servidor_url, telefone_original)
 
@@ -176,14 +210,14 @@ def processa_lead(lead: dict, coluna_telefone: str, servidor_url: str, brave_api
 
     nome_decisor = (lead.get("nome_decisor") or "").strip()
     razao_social = lead.get("razao_social", "")
-    if not brave_api_key or (not nome_decisor and not razao_social):
+    if not (tavily_api_key or brave_api_key) or (not nome_decisor and not razao_social):
         return resultado
 
     candidatos: list[tuple[str, str]] = []  # (numero_bruto, fonte)
 
     if nome_decisor:
         try:
-            r1 = brave_search(f'"{nome_decisor}" wa.me', brave_api_key)
+            r1 = web_search(f'"{nome_decisor}" wa.me', tavily_api_key, brave_api_key)
             time.sleep(SECONDS_BETWEEN_BRAVE_CALLS)
         except Exception as exc:
             print(f"[aviso] busca wa.me falhou p/ {nome_decisor}: {exc}", file=sys.stderr)
@@ -193,7 +227,7 @@ def processa_lead(lead: dict, coluna_telefone: str, servidor_url: str, brave_api
 
     if razao_social:
         try:
-            r2 = brave_search(f"{razao_social} telefone whatsapp contato", brave_api_key)
+            r2 = web_search(f"{razao_social} telefone whatsapp contato", tavily_api_key, brave_api_key)
             time.sleep(SECONDS_BETWEEN_BRAVE_CALLS)
         except Exception as exc:
             print(f"[aviso] busca telefone falhou p/ {razao_social}: {exc}", file=sys.stderr)
@@ -237,9 +271,14 @@ def main():
     parser.add_argument("--somente-com-whatsapp", action="store_true", help="Grava no CSV de saída só quem ficou com tem_whatsapp_final=sim")
     args = parser.parse_args()
 
+    tavily_api_key = os.environ.get("TAVILY_API_KEY")
     brave_api_key = os.environ.get("BRAVE_API_KEY")
-    if not brave_api_key:
-        print("[aviso] BRAVE_API_KEY não definida — não vai buscar número alternativo pra quem não tem WhatsApp no original.", file=sys.stderr)
+    if tavily_api_key:
+        print("[info] usando Tavily pra busca de número alternativo.", file=sys.stderr)
+    elif brave_api_key:
+        print("[info] usando Brave Search pra busca de número alternativo.", file=sys.stderr)
+    else:
+        print("[aviso] nem TAVILY_API_KEY nem BRAVE_API_KEY definidas — não vai buscar número alternativo pra quem não tem WhatsApp no original.", file=sys.stderr)
 
     try:
         saude = requests.get(f"{args.servidor_whatsapp}/health", timeout=5).json()
@@ -279,7 +318,7 @@ def main():
             if cnpj and cnpj in done_cnpjs:
                 continue
             print(f"[{i}/{len(leads)}] {lead.get('razao_social', '')}...", file=sys.stderr)
-            resultado = processa_lead(lead, args.coluna_telefone, args.servidor_whatsapp, brave_api_key)
+            resultado = processa_lead(lead, args.coluna_telefone, args.servidor_whatsapp, tavily_api_key, brave_api_key)
             contagem[resultado["tem_whatsapp_final"]] = contagem.get(resultado["tem_whatsapp_final"], 0) + 1
 
             if args.somente_com_whatsapp and resultado["tem_whatsapp_final"] != "sim":

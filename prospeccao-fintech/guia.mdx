@@ -195,7 +195,7 @@ Adiciona `tem_whatsapp` (`sim`/`nao`/`erro`/`sem_numero`) e `whatsapp_jid`.
 Na prática, boa parte dos telefones da Receita Federal são fixo, número de contador/despachante, ou número antigo — **a maioria não tem WhatsApp**. Rodar só a Etapa 2.7 e seguir com quem não passou é jogar dinheiro fora do mesmo jeito. `prospeccao-fintech/scripts/completar_whatsapp.py` fecha esse funil:
 
 1. Checa o telefone original (via `servidor_whatsapp.js`, abaixo).
-2. Se não tiver WhatsApp, busca na internet (Brave Search) um telefone alternativo ligado ao **nome do decisor** — link direto de WhatsApp (`wa.me`/`api.whatsapp.com`) em bio de Instagram/Linktree/site pessoal, ou telefone comercial do site da empresa.
+2. Se não tiver WhatsApp, busca na internet (Tavily, ou Brave Search como alternativa) um telefone alternativo ligado ao **nome do decisor** — link direto de WhatsApp (`wa.me`/`api.whatsapp.com`) em bio de Instagram/Linktree/site pessoal, ou telefone comercial do site da empresa.
 3. Checa WhatsApp no alternativo também.
 4. Com `--somente-com-whatsapp`, só grava no CSV final quem teve WhatsApp confirmado em algum dos dois — esse é o filtro de verdade antes do disparo.
 
@@ -210,19 +210,21 @@ node servidor_whatsapp.js
 Escaneie o QR code (mesmo aviso da Etapa 2.7: chip secundário, nunca o WhatsApp principal). Deixe rodando e, em outro terminal:
 
 ```bash
-export BRAVE_API_KEY="sua-chave"
+export TAVILY_API_KEY="sua-chave"   # https://tavily.com — 1.000 buscas/mês grátis, sem cartão
 python prospeccao-fintech/scripts/completar_whatsapp.py \
   leads_com_socios.csv leads_finais.csv \
   --coluna-telefone telefone_e164 --somente-com-whatsapp
 ```
 
+`BRAVE_API_KEY` também funciona no lugar de `TAVILY_API_KEY` (se as duas estiverem definidas, usa Tavily). Diferença: Brave perdeu o tier grátis em fev/2026 e agora cobra por busca; Tavily é o caminho genuinamente sem custo hoje.
+
 Adiciona `telefone_original`, `tem_whatsapp_original`, `telefone_alternativo`, `fonte_alternativo` (`wa.me_pessoal` ou `site_comercial`), `tem_whatsapp_alternativo`, `telefone_final` e `tem_whatsapp_final`.
 
 <Warning>
   - Precisa do `servidor_whatsapp.js` rodando e autenticado **antes** de chamar este script — sem isso ele avisa e trata cada checagem como erro (`tem_whatsapp_original=erro`), sem travar a busca por alternativa.
-  - Sem `BRAVE_API_KEY`, o script avisa e simplesmente não busca alternativa — quem não tem WhatsApp no original fica com `tem_whatsapp_final=nao`.
+  - Sem `TAVILY_API_KEY` nem `BRAVE_API_KEY`, o script avisa e simplesmente não busca alternativa — quem não tem WhatsApp no original fica com `tem_whatsapp_final=nao`.
   - `--somente-com-whatsapp` **exclui** do CSV de saída quem não teve WhatsApp confirmado em nenhum número — normal que o total final seja bem menor que o de entrada.
-  - Testado de ponta a ponta com o servidor no ar mas sem sessão autenticada, e com/sem `--somente-com-whatsapp` — sem uma sessão de WhatsApp real conectada não dá pra validar os casos "achou um número no Brave Search e confirmou WhatsApp nele" de fato; rode num lote pequeno primeiro pra conferir.
+  - Testado de ponta a ponta com o servidor no ar mas sem sessão autenticada, e com/sem `--somente-com-whatsapp` — sem uma sessão de WhatsApp real conectada não dá pra validar os casos "achou um número no Tavily/Brave e confirmou WhatsApp nele" de fato; rode num lote pequeno primeiro pra conferir.
 </Warning>
 
 ## Etapa 3 — Agente de IA (pesquisa ativa + fonte)
