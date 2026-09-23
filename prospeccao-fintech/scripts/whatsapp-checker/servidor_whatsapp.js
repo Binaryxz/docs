@@ -38,10 +38,20 @@ const qrcodeTerminal = require("qrcode-terminal");
 const AUTH_DIR = path.join(__dirname, "auth_info");
 const LOGGER = pino({ level: "silent" });
 const PORT = parseInt(process.env.WHATSAPP_SERVER_PORT || "3939", 10);
-const DELAY_MS = parseInt(process.env.WHATSAPP_SERVER_DELAY_MS || "4000", 10);
+
+// Padrão conservador: 8-13s entre checagens (8s + até 5s de variação
+// aleatória), e uma pausa mais longa a cada N checagens — imita melhor um
+// uso humano do que um intervalo fixo curto, que é justamente o padrão que
+// entrega automação. Ajustável, mas o padrão já é pensado pra reduzir risco
+// de bloqueio, não pra velocidade.
+const DELAY_MS = parseInt(process.env.WHATSAPP_SERVER_DELAY_MS || "8000", 10);
+const JITTER_MAX_MS = parseInt(process.env.WHATSAPP_SERVER_JITTER_MS || "5000", 10);
+const PAUSA_LONGA_A_CADA = parseInt(process.env.WHATSAPP_SERVER_PAUSA_A_CADA || "50", 10);
+const PAUSA_LONGA_MS = parseInt(process.env.WHATSAPP_SERVER_PAUSA_LONGA_MS || "90000", 10);
 
 let sockAtual = null;
 let filaOcupada = false;
+let checagensDesdeAPausa = 0;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -136,7 +146,19 @@ async function processaFila() {
     const { numero, resolve } = fila.shift();
     const resultado = await checaNumero(numero);
     resolve(resultado);
-    if (fila.length > 0) await sleep(DELAY_MS);
+    checagensDesdeAPausa++;
+
+    if (fila.length === 0) break;
+
+    if (checagensDesdeAPausa >= PAUSA_LONGA_A_CADA) {
+      const pausa = PAUSA_LONGA_MS + Math.floor(Math.random() * PAUSA_LONGA_MS * 0.3);
+      console.log(`[pausa longa] ${checagensDesdeAPausa} checagens feitas, pausando ${Math.round(pausa / 1000)}s...`);
+      checagensDesdeAPausa = 0;
+      await sleep(pausa);
+    } else {
+      const jitter = Math.floor(Math.random() * JITTER_MAX_MS);
+      await sleep(DELAY_MS + jitter);
+    }
   }
   filaOcupada = false;
 }
@@ -153,7 +175,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ conectado: sockAtual !== null, fila: fila.length }));
+    res.end(JSON.stringify({ conectado: sockAtual !== null, fila: fila.length, checagens_desde_a_pausa: checagensDesdeAPausa }));
     return;
   }
 
