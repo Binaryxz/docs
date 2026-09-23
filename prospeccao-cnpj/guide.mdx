@@ -10,7 +10,8 @@ icon: 'magnifying-glass'
 flowchart TD
     A[Base CNPJ<br/>Receita Federal via BigQuery] --> B[1-2. Filtro<br/>CNAE + capital social/porte]
     B --> C[3. Dados cadastrais<br/>telefone/e-mail da Receita + sócios + decisor]
-    C --> C2[4 opcional. Sherlocker<br/>confirma titular do telefone / CPF do decisor]
+    C --> C1[3.5. Filtro por porte<br/>nº de funcionários via LinkedIn/Brave]
+    C1 --> C2[4 opcional. Sherlocker<br/>confirma titular do telefone / CPF do decisor]
     C2 --> D[5. Agente de IA<br/>Gemini com busca nativa ou Brave Search]
     D --> E[Planilha final<br/>dados da Receita + colunas novas]
 ```
@@ -203,8 +204,40 @@ usamos o sócio mais antigo cadastrado. Veja
 Depois de salvar os resultados de `filtro_cnae.sql` e `socios_decisor.sql`
 em tabelas, junte os dois com `prospeccao-cnpj/scripts/join_leads_socios.sql`
 (LEFT JOIN por `cnpj_basico`) e exporte o resultado como
-`leads_com_socios.csv` — é esse arquivo que alimenta a etapa 4 (ou, se você
-pular essa etapa, diretamente a etapa 5.
+`leads_com_socios.csv` — é esse arquivo que alimenta a etapa 3.5.
+
+## Etapa 3.5 — Filtro por porte (nº de funcionários)
+
+<Note>
+  Etapa **sempre** rodada nesta configuração (preferência confirmada pelo
+  cliente) — não é opcional como as demais etapas marcadas "(opcional)"
+  neste guia.
+</Note>
+
+`prospeccao-cnpj/scripts/filtrar_porte_empresa.py` busca a página da
+empresa no LinkedIn via Brave Search e extrai a faixa "X-Y employees" que
+aparece no resumo, descartando quem está claramente acima do limite antes
+de gastar chamada de enriquecimento numa empresa grande demais pro ICP.
+Reaproveita `achar_porte_empresa`/`brave_search` de
+`enrich_leads_gratis.py` (mesma lógica, sem duplicar código).
+
+Classificação: `sim` (mantém — faixa inteira dentro do limite), `nao`
+(remove — faixa inteira acima), `provavel` (mantém — o limite cai dentro
+da faixa achada; falso negativo é pior que falso positivo aqui), ou vazio
+(mantém — não achou a página/faixa; não descarta por falta de dado).
+
+```bash
+export BRAVE_API_KEY="sua-chave"
+python prospeccao-cnpj/scripts/filtrar_porte_empresa.py \
+  leads_com_socios.csv leads_porte_ok.csv --max-funcionarios 40
+```
+
+<Note>
+  Não dá pra extrair contagem exata de funcionários do LinkedIn via busca
+  simples — o snippet do Brave mostra a faixa que o próprio LinkedIn expõe
+  publicamente, não um número exato, e a mesma limitação de "seguidores ≠
+  funcionários" mencionada mais abaixo (Etapa 5, Opção C) se aplica aqui.
+</Note>
 
 ## Etapa 4 (opcional) — Confirmar titular do telefone via Sherlocker
 
@@ -250,7 +283,7 @@ lote) para, por lead:
 ```bash
 export SHERLOCKER_API_KEY="sua-chave"  # nunca no código — só variável de ambiente
 python prospeccao-cnpj/scripts/verificar_telefone_decisor.py \
-  leads_com_socios.csv leads_com_telefone_decisor.csv
+  leads_porte_ok.csv leads_com_telefone_decisor.csv
 ```
 
 Adiciona ao CSV as colunas `titular_telefone_nome`,
@@ -306,7 +339,7 @@ telefone só se estiver publicamente associado a essa pessoa) quando
 ```bash
 export GEMINI_API_KEY="sua-chave"
 pip install -r prospeccao-cnpj/scripts/requirements.txt
-python prospeccao-cnpj/scripts/enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
+python prospeccao-cnpj/scripts/enrich_leads.py leads_porte_ok.csv leads_enriquecidos.csv
 ```
 
 <Tip>
@@ -337,7 +370,7 @@ termos, dentro de um orçamento máximo por empresa.
 export GEMINI_API_KEY="sua-chave"      # grátis, sem billing (não usa grounding nativo)
 export BRAVE_API_KEY="sua-chave-brave" # a conta usada aqui costuma ser billing por unidades pré-pagas — confira saldo
 pip install -r prospeccao-cnpj/scripts/requirements.txt
-python prospeccao-cnpj/scripts/agentic_enrich.py leads_com_socios.csv leads_enriquecidos.csv
+python prospeccao-cnpj/scripts/agentic_enrich.py leads_porte_ok.csv leads_enriquecidos.csv
 ```
 
 ### Opção C — Só Brave Search, sem LLM (mais barata)
@@ -358,7 +391,7 @@ filtrar por porte via faixa de funcionários do LinkedIn.
 
 ```bash
 export BRAVE_API_KEY="sua-chave"
-python prospeccao-cnpj/scripts/enrich_leads_gratis.py leads_com_socios.csv leads_enriquecidos.csv
+python prospeccao-cnpj/scripts/enrich_leads_gratis.py leads_porte_ok.csv leads_enriquecidos.csv
 ```
 
 Todas as opções gravam incrementalmente (`flush` a cada linha) e pulam
@@ -369,7 +402,7 @@ saída — uma falha no meio não perde o progresso.
 
 ```bash
 python prospeccao-cnpj/scripts/build_planilha_final.py \
-  leads_com_socios.csv leads_enriquecidos.csv planilha_final.xlsx
+  leads_porte_ok.csv leads_enriquecidos.csv planilha_final.xlsx
 ```
 
 O resultado (`planilha_final.xlsx`) tem uma linha por CNPJ, com todos os
@@ -386,7 +419,7 @@ remapeia a saída do pipeline para esse formato — por padrão, colunas
 
 ```bash
 python prospeccao-cnpj/scripts/adaptar_formato_importacao.py \
-  leads_com_socios.csv leads_enriquecidos.csv saida_importacao.csv \
+  leads_porte_ok.csv leads_enriquecidos.csv saida_importacao.csv \
   --fonte-original base_original.xlsx
 ```
 

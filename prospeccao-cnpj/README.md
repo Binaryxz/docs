@@ -75,21 +75,27 @@ python filtrar_cnpjs_local.py \
 ### Etapas seguintes (comuns aos dois caminhos)
 
 ```bash
+# 3.5. filtro por porte (nº de funcionários) — SEMPRE rodar, faz parte do
+# fluxo padrão pra este cliente (descarta empresa grande demais antes de
+# gastar chamada de enriquecimento nela)
+export BRAVE_API_KEY="..."
+python filtrar_porte_empresa.py leads_com_socios.csv leads_porte_ok.csv --max-funcionarios N
+
 # 4. (opcional, pago) confirmar titular do telefone
 export SHERLOCKER_API_KEY="..."
-python verificar_telefone_decisor.py leads_com_socios.csv leads_com_telefone_decisor.csv
+python verificar_telefone_decisor.py leads_porte_ok.csv leads_com_telefone_decisor.csv
 
 # 5. enriquecimento por IA — escolha uma opção
 export GEMINI_API_KEY="..."
-python enrich_leads.py leads_com_socios.csv leads_enriquecidos.csv
+python enrich_leads.py leads_porte_ok.csv leads_enriquecidos.csv
 # ou: export BRAVE_API_KEY="..."; python agentic_enrich.py ...
 # ou (sem LLM, mais barato):        python enrich_leads_gratis.py ...
 
 # 6. planilha final
-python build_planilha_final.py leads_com_socios.csv leads_enriquecidos.csv planilha_final.xlsx
+python build_planilha_final.py leads_porte_ok.csv leads_enriquecidos.csv planilha_final.xlsx
 
 # 7. (opcional) formato de importação de outra ferramenta
-python adaptar_formato_importacao.py leads_com_socios.csv leads_enriquecidos.csv saida_importacao.csv
+python adaptar_formato_importacao.py leads_porte_ok.csv leads_enriquecidos.csv saida_importacao.csv
 ```
 
 ## Preferências deste cliente (contadores)
@@ -103,6 +109,10 @@ python adaptar_formato_importacao.py leads_com_socios.csv leads_enriquecidos.csv
   entregável final prioriza `whatsapp_publico` sobre um telefone comercial
   genérico (`telefone_comercial_ia`) — ver ordem em
   `adaptar_formato_importacao.py`.
+- **Filtro por porte (funcionários) é sempre etapa 3.5**, entre decisor e
+  enriquecimento — `filtrar_porte_empresa.py`. O `--max-funcionarios` não
+  tem um padrão fixo no código de propósito (é decisão de negócio); combine
+  o número com o cliente antes de rodar em lote.
 
 ## Lições já incorporadas (não repetir)
 
