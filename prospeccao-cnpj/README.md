@@ -120,6 +120,13 @@ python validar_whatsapp_cloud_api.py leads_porte_ok.csv leads_com_whatsapp.csv \
   enriquecimento — `filtrar_porte_empresa.py`. O `--max-funcionarios` não
   tem um padrão fixo no código de propósito (é decisão de negócio); combine
   o número com o cliente antes de rodar em lote.
+- **Fixo é sempre excluído do entregável final, automaticamente.**
+  `filtrar_cnpjs_local.py` já marca `provavel_celular` (sim/nao/
+  formato_invalido) a partir do 1º dígito do número local — fixo não tem
+  como ter WhatsApp, é limitação técnica do plano de numeração brasileiro,
+  não achismo. `adaptar_formato_importacao.py` remove `provavel_celular ==
+  "nao"` sozinho, sem precisar de flag nem de nenhuma API/crédito. Na base
+  de contadores, ~38% dos telefones da Receita são fixo.
 
 ## Lições já incorporadas (não repetir)
 

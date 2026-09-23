@@ -112,7 +112,25 @@ COLUNAS_SAIDA = [
     "uf", "municipio", "ddd_1", "telefone_1", "ddd_2", "telefone_2",
     "correio_eletronico", "nome_decisor", "documento_decisor",
     "qualificacao_socio", "eh_decisor", "data_entrada_sociedade",
+    "provavel_celular",
 ]
+
+
+def eh_numero_local_celular(telefone_1: str) -> bool:
+    """Plano de numeração brasileiro: o número local de linha fixa começa
+    com 2-5, o de celular com 6-9 — regra do primeiro dígito local,
+    independente do 9º dígito (que a Receita não guarda em telefone_1).
+    WhatsApp só existe em celular; fixo é exclusão técnica certa, não
+    achismo — filtrar por isso é grátis e não depende de nenhuma API."""
+    d = (telefone_1 or "").strip()
+    return len(d) == 8 and d.isdigit() and d[0] in "6789"
+
+
+def provavel_celular(telefone_1: str) -> str:
+    d = (telefone_1 or "").strip()
+    if not (len(d) == 8 and d.isdigit()):
+        return "formato_invalido" if d else ""
+    return "sim" if eh_numero_local_celular(telefone_1) else "nao"
 
 
 def expandir(padroes: list[str]) -> list[str]:
@@ -374,6 +392,7 @@ def main() -> None:
                     "qualificacao_socio": decisor.get("qualificacao_socio", ""),
                     "eh_decisor": decisor.get("eh_decisor", ""),
                     "data_entrada_sociedade": decisor.get("data_entrada_sociedade", ""),
+                    "provavel_celular": provavel_celular(estab.get("telefone_1", "")),
                 }
             )
     print("CONCLUIDO", file=sys.stderr)

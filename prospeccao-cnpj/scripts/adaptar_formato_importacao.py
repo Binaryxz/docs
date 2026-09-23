@@ -88,6 +88,16 @@ def main(leads_path: str, enriquecidos_path: str, output_path: str, fonte_origin
         if excluidos:
             print(f"{excluidos} leads excluídos por terem porte acima do limite de funcionários.", file=sys.stderr)
 
+    if "provavel_celular" in planilha.columns:
+        # Fixo não tem como ter WhatsApp (limitação técnica do plano de
+        # numeração brasileiro, não achismo) — exclusão automática e
+        # gratuita, sem depender de nenhuma API. Ver
+        # provavel_celular() em filtrar_cnpjs_local.py.
+        excluidos = (planilha["provavel_celular"] == "nao").sum()
+        planilha = planilha[planilha["provavel_celular"] != "nao"].copy()
+        if excluidos:
+            print(f"{excluidos} leads excluídos por telefone ser fixo (sem WhatsApp possível).", file=sys.stderr)
+
     fallback_por_cnpj: dict[str, dict] = {}
     if fonte_original:
         origem = pd.read_excel(fonte_original) if fonte_original.endswith((".xlsx", ".xls")) else pd.read_csv(fonte_original, dtype=str)
