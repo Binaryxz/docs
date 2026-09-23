@@ -39,15 +39,14 @@ const AUTH_DIR = path.join(__dirname, "auth_info");
 const LOGGER = pino({ level: "silent" });
 const PORT = parseInt(process.env.WHATSAPP_SERVER_PORT || "3939", 10);
 
-// Padrão conservador: 8-13s entre checagens (8s + até 5s de variação
-// aleatória), e uma pausa mais longa a cada N checagens — imita melhor um
-// uso humano do que um intervalo fixo curto, que é justamente o padrão que
-// entrega automação. Ajustável, mas o padrão já é pensado pra reduzir risco
-// de bloqueio, não pra velocidade.
-const DELAY_MS = parseInt(process.env.WHATSAPP_SERVER_DELAY_MS || "8000", 10);
-const JITTER_MAX_MS = parseInt(process.env.WHATSAPP_SERVER_JITTER_MS || "5000", 10);
-const PAUSA_LONGA_A_CADA = parseInt(process.env.WHATSAPP_SERVER_PAUSA_A_CADA || "50", 10);
-const PAUSA_LONGA_MS = parseInt(process.env.WHATSAPP_SERVER_PAUSA_LONGA_MS || "90000", 10);
+// 4-6s entre checagens (4s + até 2s de variação aleatória), e uma pausa mais
+// longa a cada 100 checagens — mais rápido que o padrão anterior (8-13s a
+// cada 50), continua com alguma variação em vez de intervalo fixo, mas é
+// um ritmo mais arriscado que o conservador. Ajustável via env var.
+const DELAY_MS = parseInt(process.env.WHATSAPP_SERVER_DELAY_MS || "4000", 10);
+const JITTER_MAX_MS = parseInt(process.env.WHATSAPP_SERVER_JITTER_MS || "2000", 10);
+const PAUSA_LONGA_A_CADA = parseInt(process.env.WHATSAPP_SERVER_PAUSA_A_CADA || "100", 10);
+const PAUSA_LONGA_MS = parseInt(process.env.WHATSAPP_SERVER_PAUSA_LONGA_MS || "60000", 10);
 
 let sockAtual = null;
 let filaOcupada = false;
@@ -136,29 +135,41 @@ async function checaNumero(numeroBruto) {
   }
 }
 
-// Fila simples: uma checagem por vez, com delay entre elas — mesmo se vários
-// clientes chamarem o servidor ao mesmo tempo, não dispara rajada pro WhatsApp.
+// Fila simples: uma checagem por vez. O ritmo é controlado por
+// `proximoHorarioPermitido` (relógio de parede), NÃO por "tem mais coisa na
+// fila" — um cliente sequencial (pede um número, espera a resposta, só
+// então pede o próximo, como completar_whatsapp.py) nunca deixa mais de um
+// item na fila ao mesmo tempo, e uma versão anterior deste código só
+// aplicava o delay quando havia mais de um item enfileirado — na prática,
+// o delay NUNCA rodava contra um cliente sequencial. Usar um horário-limite
+// absoluto corrige isso: a próxima checagem espera até esse horário mesmo
+// que a fila tenha ficado vazia entre uma chamada e outra.
 const fila = [];
+let proximoHorarioPermitido = 0;
+
 async function processaFila() {
   if (filaOcupada) return;
   filaOcupada = true;
   while (fila.length > 0) {
     const { numero, resolve } = fila.shift();
-    const resultado = await checaNumero(numero);
-    resolve(resultado);
-    checagensDesdeAPausa++;
 
-    if (fila.length === 0) break;
+    const espera = proximoHorarioPermitido - Date.now();
+    if (espera > 0) await sleep(espera);
+
+    const resultado = await checaNumero(numero);
+    checagensDesdeAPausa++;
 
     if (checagensDesdeAPausa >= PAUSA_LONGA_A_CADA) {
       const pausa = PAUSA_LONGA_MS + Math.floor(Math.random() * PAUSA_LONGA_MS * 0.3);
-      console.log(`[pausa longa] ${checagensDesdeAPausa} checagens feitas, pausando ${Math.round(pausa / 1000)}s...`);
+      console.log(`[pausa longa] ${checagensDesdeAPausa} checagens feitas, pausando ${Math.round(pausa / 1000)}s antes da próxima...`);
       checagensDesdeAPausa = 0;
-      await sleep(pausa);
+      proximoHorarioPermitido = Date.now() + pausa;
     } else {
       const jitter = Math.floor(Math.random() * JITTER_MAX_MS);
-      await sleep(DELAY_MS + jitter);
+      proximoHorarioPermitido = Date.now() + DELAY_MS + jitter;
     }
+
+    resolve(resultado);
   }
   filaOcupada = false;
 }
