@@ -11,6 +11,13 @@ de cada uma e enriquece com dados públicos da web (site, WhatsApp, LinkedIn)
   enriquecimento por IA, formatação final. Leia
   **[`prospeccao-cnpj/README.md`](prospeccao-cnpj/README.md)** antes de rodar.
 
+## 🎯 Prospecção Fintech
+
+Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no Brasil: filtro por CNAE/capital social na base de CNPJ da Receita Federal, identificação do decisor (sócio-administrador), validação de telefone (formato + WhatsApp ativo) e enriquecimento via IA.
+
+- 📖 **[Guia completo](prospeccao-fintech/guia.mdx)**
+- 💻 **[Scripts](prospeccao-fintech/scripts)**
+
 ---
 
 # Mintlify Starter Kit

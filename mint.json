@@ -58,6 +58,13 @@
       ]
     },
     {
+      "group": "Guides",
+      "pages": [
+        "prospeccao-fintech/guia",
+        "prospeccao-cnpj/guide"
+      ]
+    },
+    {
       "group": "Essentials",
       "pages": [
         "essentials/markdown",
@@ -66,12 +73,6 @@
         "essentials/settings",
         "essentials/navigation",
         "essentials/reusable-snippets"
-      ]
-    },
-    {
-      "group": "Guides",
-      "pages": [
-        "prospeccao-cnpj/guide"
       ]
     },
     {
