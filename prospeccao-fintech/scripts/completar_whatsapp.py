@@ -269,6 +269,7 @@ def main():
     parser.add_argument("--coluna-telefone", default="telefone_e164", help="Coluna com o telefone original (padrão telefone_e164)")
     parser.add_argument("--servidor-whatsapp", default="http://localhost:3939", help="URL do servidor_whatsapp.js (padrão http://localhost:3939)")
     parser.add_argument("--somente-com-whatsapp", action="store_true", help="Grava no CSV de saída só quem ficou com tem_whatsapp_final=sim")
+    parser.add_argument("--parar-em-sim", type=int, default=None, help="Para de processar assim que atingir N leads com tem_whatsapp_final=sim (soma com os já confirmados em execuções anteriores retomadas)")
     args = parser.parse_args()
 
     tavily_api_key = os.environ.get("TAVILY_API_KEY")
@@ -300,13 +301,16 @@ def main():
     ]
 
     done_cnpjs = set()
+    ja_confirmados = 0
     if os.path.exists(args.saida):
         with open(args.saida, newline="", encoding="utf-8") as f_prev:
             for row in csv.DictReader(f_prev):
                 done_cnpjs.add(row.get("cnpj", ""))
+                if row.get("tem_whatsapp_final") == "sim":
+                    ja_confirmados += 1
 
     write_header = not os.path.exists(args.saida)
-    contagem = {"sim": 0, "nao": 0}
+    contagem = {"sim": ja_confirmados, "nao": 0}
 
     with open(args.saida, "a", newline="", encoding="utf-8") as f_out:
         writer = csv.DictWriter(f_out, fieldnames=campos_saida)
@@ -314,6 +318,9 @@ def main():
             writer.writeheader()
 
         for i, lead in enumerate(leads, start=1):
+            if args.parar_em_sim is not None and contagem["sim"] >= args.parar_em_sim:
+                print(f"[info] atingiu {args.parar_em_sim} confirmados com WhatsApp, parando.", file=sys.stderr)
+                break
             cnpj = lead.get("cnpj", "")
             if cnpj and cnpj in done_cnpjs:
                 continue
