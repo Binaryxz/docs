@@ -97,12 +97,21 @@ python build_planilha_final.py leads_porte_ok.csv leads_enriquecidos.csv planilh
 # 7. (opcional) formato de importação de outra ferramenta
 python adaptar_formato_importacao.py leads_porte_ok.csv leads_enriquecidos.csv saida_importacao.csv
 
-# 8. (opcional) validar WhatsApp via API oficial da Meta — precisa de conta
-# Business verificada + template aprovado; ver docstring do script
+# 8. (opcional) validar WhatsApp — duas opções, escolha uma
+
+# 8a. API oficial da Meta — sem custo por consulta dentro do limite do
+# plano, mas precisa de conta Business verificada + template aprovado
 export WHATSAPP_ACCESS_TOKEN="..."
 export WHATSAPP_PHONE_NUMBER_ID="..."
 python validar_whatsapp_cloud_api.py leads_porte_ok.csv leads_com_whatsapp.csv \
   --template nome_do_template_aprovado --limite 5   # teste pequeno antes do volume real
+
+# 8b. CheckNumber.AI — sem cadastro na Meta, mas cobra por número
+# consultado (~$0,0225/número); não conecta nenhum número seu (sem QR
+# code, sem sessão do WhatsApp Web)
+export CHECKNUMBER_API_KEY="..."
+python validar_whatsapp_checknumber.py leads_porte_ok.csv leads_com_whatsapp.csv \
+  --limite 5   # teste pequeno antes do volume real
 ```
 
 ## Preferências deste cliente (contadores)
