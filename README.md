@@ -1,3 +1,16 @@
+## 🔎 Pipeline de prospecção via CNPJ + IA
+
+Pipeline config-driven que filtra empresas brasileiras reais (dados oficiais
+da Receita Federal) por CNAE/capital social, identifica o decisor provável
+de cada uma e enriquece com dados públicos da web (site, WhatsApp, LinkedIn)
+— gerando uma planilha pronta pra disparo comercial.
+
+- 📖 **[Guia completo](prospeccao-cnpj/guide.mdx)** — arquitetura, setup de
+  GCP/BigQuery, passo a passo de cada etapa.
+- ⚙️ **[Scripts e config](prospeccao-cnpj/scripts/)** — SQL, filtro local,
+  enriquecimento por IA, formatação final. Leia
+  **[`prospeccao-cnpj/README.md`](prospeccao-cnpj/README.md)** antes de rodar.
+
 ## 🎯 Prospecção Fintech
 
 Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no Brasil: filtro por CNAE/capital social na base de CNPJ da Receita Federal, identificação do decisor (sócio-administrador), validação de telefone (formato + WhatsApp ativo) e enriquecimento via IA.
