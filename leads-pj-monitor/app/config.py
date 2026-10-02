@@ -27,6 +27,13 @@ PADRAO_CONFIG = {
     "limite_atraso_alerta_dias": 5,
     "ritmo_requisicao_segundos": 2.0,
     "filtro_somente_pj": True,
+    # Exige natureza jurídica na faixa 2000-2999 ("Entidades Empresariais"
+    # na classificação da Receita) — descoberto rodando uma leva real que,
+    # sem isso, câmara de vereadores (1xxx, Administração Pública),
+    # condomínio, igreja e associação (3xxx, Entidades sem Fins Lucrativos)
+    # passavam como "ATIVA" e viravam lead, o que não faz sentido pra
+    # prospecção comercial.
+    "exigir_natureza_empresarial": True,
     "filtro_excluir_empresas_grandes": True,
     "teto_capital_social": 10_000_000,
     "naturezas_juridicas_excluidas": ["2046", "2054"],

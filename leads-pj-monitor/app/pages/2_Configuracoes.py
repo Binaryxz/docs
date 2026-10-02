@@ -66,6 +66,10 @@ with aba_filtros:
     st.subheader("Filtros de exclusão")
     somente_pj = st.checkbox("Considerar somente pessoa jurídica", value=cfg.get("filtro_somente_pj", True))
     situacao_ativa = st.checkbox("Exigir situação cadastral ATIVA", value=cfg.get("filtro_situacao_ativa", True))
+    exigir_natureza_empresarial = st.checkbox(
+        "Exigir natureza jurídica empresarial (exclui órgão público, condomínio, igreja, associação...)",
+        value=cfg.get("exigir_natureza_empresarial", True),
+    )
     excluir_grandes = st.checkbox(
         "Excluir empresas grandes", value=cfg.get("filtro_excluir_empresas_grandes", True)
     )
@@ -85,6 +89,7 @@ with aba_filtros:
     if st.button("Salvar filtros"):
         set_config("filtro_somente_pj", somente_pj)
         set_config("filtro_situacao_ativa", situacao_ativa)
+        set_config("exigir_natureza_empresarial", exigir_natureza_empresarial)
         set_config("filtro_excluir_empresas_grandes", excluir_grandes)
         set_config("teto_capital_social", teto_capital)
         set_config("limite_filiais_ativas", limite_filiais)

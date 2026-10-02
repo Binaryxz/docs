@@ -41,8 +41,9 @@ def _inserir_processo_com_lead(numero_cnj: str, cnpj: str, situacao: str = "ATIV
         {"n": numero_cnj},
     )
     execute(
-        "INSERT INTO empresas_receita (cnpj, cnpj_basico, razao_social, situacao_cadastral, capital_social, porte_codigo) "
-        "VALUES (:c, :b, 'EMPRESA TESTE', :s, :cap, '03')",
+        "INSERT INTO empresas_receita "
+        "(cnpj, cnpj_basico, razao_social, situacao_cadastral, capital_social, porte_codigo, natureza_juridica_codigo) "
+        "VALUES (:c, :b, 'EMPRESA TESTE', :s, :cap, '03', 2062)",  # 2062 = Sociedade Empresária Limitada
         {"c": cnpj, "b": cnpj[:8], "s": situacao, "cap": capital},
     )
     execute(
@@ -77,6 +78,27 @@ def test_qualificacao_descarta_capital_social_acima_do_teto():
 
     lead = fetch_one("SELECT motivo_descarte FROM leads WHERE numero_cnj = :n", {"n": "2222222-22.2026.8.26.0100"})
     assert "capital social" in lead["motivo_descarte"]
+
+
+def test_qualificacao_descarta_natureza_juridica_nao_empresarial():
+    """Regressão de um achado real: câmara de vereadores, condomínio e
+    associação vinham ATIVA na Receita e passavam como lead antes deste
+    filtro (naturezas 1xxx/3xxx, fora da faixa 2000-2999 de "Entidades
+    Empresariais")."""
+    from app.qualification import qualificar_leads_pendentes
+    from app.db import execute, fetch_one
+
+    _inserir_processo_com_lead("4444444-44.2026.8.26.0100", "44444444000100", capital=1_000)
+    execute(
+        "UPDATE empresas_receita SET natureza_juridica_codigo = 1066 WHERE cnpj = '44444444000100'"
+    )
+    resultado = qualificar_leads_pendentes()
+    assert resultado["descartados"] == 1
+
+    lead = fetch_one(
+        "SELECT motivo_descarte FROM leads WHERE numero_cnj = :n", {"n": "4444444-44.2026.8.26.0100"}
+    )
+    assert "natureza jurídica" in lead["motivo_descarte"]
 
 
 def test_qualificacao_aprova_empresa_dentro_dos_criterios():

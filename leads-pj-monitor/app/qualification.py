@@ -47,6 +47,11 @@ def _motivo_exclusao(empresa: dict, config: dict) -> str | None:
     if config.get("filtro_situacao_ativa") and empresa["situacao_cadastral"] != "ATIVA":
         return f"situação cadastral {empresa['situacao_cadastral']}, não ATIVA"
 
+    if config.get("exigir_natureza_empresarial"):
+        natureza = empresa["natureza_juridica_codigo"]
+        if natureza is None or not (2000 <= int(natureza) <= 2999):
+            return f"natureza jurídica fora de 'Entidades Empresariais' ({natureza})"
+
     if config.get("filtro_excluir_empresas_grandes"):
         if empresa["capital_social"] and float(empresa["capital_social"]) > config["teto_capital_social"]:
             return f"capital social acima do teto (R$ {empresa['capital_social']:,.2f})"
@@ -78,6 +83,7 @@ def _percentil(serie: pd.Series) -> pd.Series:
 def qualificar_leads_pendentes() -> dict:
     cfg = {
         "filtro_situacao_ativa": get_config("filtro_situacao_ativa"),
+        "exigir_natureza_empresarial": get_config("exigir_natureza_empresarial"),
         "filtro_excluir_empresas_grandes": get_config("filtro_excluir_empresas_grandes"),
         "teto_capital_social": get_config("teto_capital_social"),
         "naturezas_juridicas_excluidas": get_config("naturezas_juridicas_excluidas"),
