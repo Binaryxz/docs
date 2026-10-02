@@ -1,0 +1,10 @@
+streamlit==1.38.0
+sqlalchemy==2.0.32
+psycopg2-binary==2.9.9
+apscheduler==3.10.4
+requests==2.32.3
+rapidfuzz==3.9.6
+pandas==2.2.2
+cryptography==43.0.0
+python-dotenv==1.0.1
+plotly==5.23.0

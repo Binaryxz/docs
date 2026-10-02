@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - leads_pj_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      APP_LOGIN_PASSWORD: ${APP_LOGIN_PASSWORD}
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      DATAJUD_API_KEY: ${DATAJUD_API_KEY}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+    ports:
+      - "8501:8501"
+    volumes:
+      - leads_pj_arquivos:/app/dados
+    command: >
+      sh -c "python scripts/aplicar_migracoes.py &&
+             streamlit run app/Painel.py --server.port=8501 --server.address=0.0.0.0"
+
+volumes:
+  leads_pj_dados:
+  leads_pj_arquivos:
