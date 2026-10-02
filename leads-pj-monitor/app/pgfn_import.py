@@ -98,11 +98,17 @@ def _processar_zip(url: str, tabela_staging: str) -> tuple[list[str], int]:
             processo = subprocess.Popen(
                 ["unzip", "-p", caminho_zip, entrada], stdout=subprocess.PIPE
             )
+            # Mesmo cuidado do import da Receita: remove byte nulo do fluxo
+            # antes do COPY (o Postgres rejeita texto com 0x00 em qualquer
+            # codificação).
+            sanitiza = subprocess.Popen(["tr", "-d", "\\000"], stdin=processo.stdout, stdout=subprocess.PIPE)
+            processo.stdout.close()
             cursor.copy_expert(
                 f"COPY {tabela_staging} FROM STDIN WITH (FORMAT csv, DELIMITER ';', HEADER true, ENCODING 'latin1')",
-                processo.stdout,
+                sanitiza.stdout,
             )
             processo.wait()
+            sanitiza.wait()
         raw_conn.commit()
         cursor.execute(f"SELECT count(*) FROM {tabela_staging}")
         total_linhas = cursor.fetchone()[0]

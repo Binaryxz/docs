@@ -89,11 +89,18 @@ def _copiar_zip_para_staging(url: str, tabela_staging: str, num_colunas: int) ->
     try:
         cursor = raw_conn.cursor()
         processo = subprocess.Popen(["unzip", "-p", caminho_zip], stdout=subprocess.PIPE)
+        # "tr -d '\000'" remove bytes nulos do fluxo — alguns arquivos reais da
+        # Receita têm byte 0x00 no meio do CSV (descoberto rodando em escala
+        # real), e o Postgres rejeita qualquer texto com byte nulo, em
+        # qualquer codificação — não é algo que ENCODING resolva.
+        sanitiza = subprocess.Popen(["tr", "-d", "\\000"], stdin=processo.stdout, stdout=subprocess.PIPE)
+        processo.stdout.close()
         cursor.copy_expert(
             f"COPY {tabela_staging} FROM STDIN WITH (FORMAT csv, DELIMITER ';', QUOTE '\"', ENCODING 'latin1')",
-            processo.stdout,
+            sanitiza.stdout,
         )
         processo.wait()
+        sanitiza.wait()
         raw_conn.commit()
         cursor.execute(f"SELECT count(*) FROM {tabela_staging}")
         total = cursor.fetchone()[0]
@@ -186,8 +193,13 @@ def consolidar_empresas_receita() -> int:
                 WHEN '08' THEN 'BAIXADA'
                 ELSE e.situacao_cadastral
             END,
-            to_date(NULLIF(e.data_situacao_cadastral, ''), 'YYYYMMDD'),
-            to_date(NULLIF(e.data_inicio_atividade, ''), 'YYYYMMDD'),
+            -- Algumas linhas reais trazem data malformada (não 8 dígitos) —
+            -- descoberto rodando em escala real. Valida o formato antes de
+            -- converter em vez de deixar o to_date() quebrar o import inteiro.
+            CASE WHEN e.data_situacao_cadastral ~ '^\d{8}$'
+                 THEN to_date(e.data_situacao_cadastral, 'YYYYMMDD') END,
+            CASE WHEN e.data_inicio_atividade ~ '^\d{8}$'
+                 THEN to_date(e.data_inicio_atividade, 'YYYYMMDD') END,
             NULLIF(REPLACE(emp.capital_social, ',', '.'), '')::NUMERIC,
             emp.porte_codigo,
             e.cnae_fiscal_principal,
