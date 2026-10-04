@@ -97,7 +97,7 @@ def qualificar_leads_pendentes() -> dict:
     leads_df = query_df(
         """
         SELECT
-            l.id AS lead_id, l.cnpj,
+            l.id AS lead_id, l.cnpj, l.status AS status_atual,
             er.razao_social, er.situacao_cadastral, er.capital_social,
             er.natureza_juridica_codigo, er.porte_codigo,
             COALESCE(fc.total_filiais_ativas, 0) AS total_filiais_ativas,
@@ -142,6 +142,21 @@ def qualificar_leads_pendentes() -> dict:
     qualificados = 0
     for _, row in leads_df.iterrows():
         motivo = _motivo_exclusao(row, cfg)
+
+        # Lead ainda em revisão manual (match por nome com confiança baixa,
+        # nenhum humano confirmou ainda) NUNCA é promovido a 'em_analise'
+        # automaticamente, mesmo que passe em todos os filtros — seria
+        # mostrar um contato/telefone real como se a empresa já estivesse
+        # confirmada, quando o nome que apareceu no processo pode ser de
+        # uma empresa (ou pessoa física) completamente diferente. Só grava
+        # o score (ajuda a priorizar a fila de revisão) e mantém o status.
+        if row["status_atual"] == "revisao_manual":
+            execute(
+                "UPDATE leads SET score_lead = :score, atualizado_em = now() WHERE id = :id",
+                {"score": float(row["score_lead"]), "id": int(row["lead_id"])},
+            )
+            continue
+
         if motivo:
             execute(
                 "UPDATE leads SET status = 'descartado', motivo_descarte = :motivo, "

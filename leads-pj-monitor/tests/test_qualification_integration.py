@@ -53,6 +53,30 @@ def _inserir_processo_com_lead(numero_cnj: str, cnpj: str, situacao: str = "ATIV
     )
 
 
+def _inserir_processo_com_lead_em_revisao(numero_cnj: str, cnpj: str, score_match: float):
+    """Mesmo que _inserir_processo_com_lead, mas simulando um match fuzzy de
+    baixa confiança (status 'revisao_manual') — nenhum humano confirmou
+    ainda que esse CNPJ é realmente a empresa do processo."""
+    from app.db import execute
+
+    execute(
+        "INSERT INTO processos (numero_cnj, tribunal, uf, data_ajuizamento, valor_causa) "
+        "VALUES (:n, 'api_publica_tjsp', 'SP', now(), 10000)",
+        {"n": numero_cnj},
+    )
+    execute(
+        "INSERT INTO empresas_receita "
+        "(cnpj, cnpj_basico, razao_social, situacao_cadastral, capital_social, porte_codigo, natureza_juridica_codigo) "
+        "VALUES (:c, :b, 'EMPRESA TESTE REVISAO', 'ATIVA', 50000, '03', 2062)",
+        {"c": cnpj, "b": cnpj[:8]},
+    )
+    execute(
+        "INSERT INTO leads (numero_cnj, cnpj, metodo_match, score_match, status) "
+        "VALUES (:n, :c, 'fuzzy', :score, 'revisao_manual')",
+        {"n": numero_cnj, "c": cnpj, "score": score_match},
+    )
+
+
 def test_qualificacao_descarta_empresa_inativa():
     from app.qualification import qualificar_leads_pendentes
     from app.db import fetch_one
@@ -112,3 +136,30 @@ def test_qualificacao_aprova_empresa_dentro_dos_criterios():
     lead = fetch_one("SELECT status, score_lead FROM leads WHERE numero_cnj = :n", {"n": "3333333-33.2026.8.26.0100"})
     assert lead["status"] == "em_analise"
     assert lead["score_lead"] is not None
+
+
+def test_qualificacao_nao_promove_lead_em_revisao_manual():
+    """Regressão de um achado real rodando leads de verdade: um match fuzzy
+    de baixa confiança (ex: "Prefeitura do Municipio de São Paulo" só por
+    coincidência sendo o candidato mais próximo, com score 40, de uma
+    empresa real completamente diferente) NÃO pode virar "em_analise"
+    sozinho — mesmo passando em todos os filtros de qualificação, continua
+    em revisão manual até um humano confirmar. Promover isso automaticamente
+    mostraria um telefone/contato real como se já fosse confirmado para o
+    processo errado."""
+    from app.qualification import qualificar_leads_pendentes
+    from app.db import fetch_one
+
+    _inserir_processo_com_lead_em_revisao("5555555-55.2026.8.26.0100", "55555555000100", score_match=40.0)
+    resultado = qualificar_leads_pendentes()
+
+    # Não deve contar como qualificado nem como descartado — continua
+    # pendente de revisão humana.
+    assert resultado["qualificados"] == 0
+    assert resultado["descartados"] == 0
+
+    lead = fetch_one(
+        "SELECT status, score_lead FROM leads WHERE numero_cnj = :n", {"n": "5555555-55.2026.8.26.0100"}
+    )
+    assert lead["status"] == "revisao_manual"
+    assert lead["score_lead"] is not None  # o score é calculado, só o status não muda
