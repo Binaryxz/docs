@@ -1,20 +1,31 @@
 """Módulo 1 — Descoberta de processos novos via API Pública do DataJud (CNJ).
 
-Formato confirmado em teste real contra a API (ver nota abaixo): endpoint
-Elasticsearch em POST https://api-publica.datajud.cnj.jus.br/{alias}/_search,
-autenticação via header "Authorization: APIKey <chave>", corpo em DSL do
-Elasticsearch, paginação por "search_after".
+Formato confirmado com chamadas reais contra a API (chave pública de
+demonstração do CNJ): endpoint Elasticsearch em POST
+https://api-publica.datajud.cnj.jus.br/{alias}/_search, autenticação via
+header "Authorization: APIKey <chave>", corpo em DSL do Elasticsearch,
+paginação por "search_after". Campos confirmados em "_source": numeroProcesso,
+classe{codigo,nome}, assuntos[{codigo,nome}], dataAjuizamento, grau,
+orgaoJulgador{codigo,nome,codigoMunicipioIBGE}, nivelSigilo (0 = público),
+movimentos[...]. "valorCausa" e "partes" NÃO vieram no teste real (pelo menos
+pra Juizado Especial Cível do TJSP) — ficam None/vazio quando ausentes, sem
+quebrar nada; "partes" é por isso mesmo que o Módulo 2 (raspagem por
+tribunal) existe.
 
-O que NÃO foi possível validar ao vivo nesta implementação (sem uma chave de
-API real à disposição no momento da escrita): os nomes exatos de todos os
-subcampos de "_source" variam um pouco entre tribunais/graus. Por isso:
-- todo campo é lido de forma defensiva (.get() com default None);
-- o hit completo é sempre guardado em `bruto_json` na tabela `processos`,
-  então nada se perde — se um campo estiver com nome errado aqui, é só
-  ajustar a função `_extrair_campos` e reprocessar a partir do bruto_json
-  já salvo, sem precisar rebaixar nada da API de novo.
-Antes de rodar em produção, confirme com uma chave real (1 processo, classe
-conhecida) que os campos abaixo vêm como esperado — ajuste se não vierem.
+**Achado importante testando ao vivo**: essa API é LENTA e inconsistente —
+uma consulta simples (size=1, sem filtro) levou ~36s; a mesma consulta com
+filtro de data + ordenação (o padrão usado na paginação real) excedeu 60s e
+voltou 504 do próprio gateway do CNJ. Isso não parece ser específico da chave
+pública compartilhada (a autenticação em si responde rápido mesmo com chave
+errada) — é característica da API sob carga. Por isso o timeout de requisição
+é bem mais generoso que o usual (ver TIMEOUT_REQUISICAO_SEGUNDOS) e o
+retry/backoff é essencial, não opcional: espere páginas ocasionalmente
+levarem mais de um minuto, e múltiplas tentativas até uma página passar.
+
+"dataAjuizamento" vem como string compacta "yyyyMMddHHmmss" (ex:
+"20260730012658"), não ISO — convertido explicitamente em `_extrair_campos`
+antes de gravar no Postgres (gravar a string bruta direto quebraria o cast
+pra TIMESTAMPTZ).
 """
 import time
 from dataclasses import dataclass, field
@@ -29,6 +40,9 @@ from app.tribunais import uf_do_tribunal
 BASE_URL = "https://api-publica.datajud.cnj.jus.br"
 TAMANHO_PAGINA = 100
 MAX_TENTATIVAS = 5
+# Visto em teste real: uma consulta com filtro de data + sort (o padrão da
+# paginação) levou mais de 60s e ainda voltou 504. 120s dá margem real.
+TIMEOUT_REQUISICAO_SEGUNDOS = 120
 
 
 @dataclass
@@ -99,7 +113,7 @@ def _requisitar_pagina(
     ultimo_erro = None
     for tentativa in range(1, MAX_TENTATIVAS + 1):
         try:
-            resp = requests.post(url, json=corpo, headers=headers, timeout=30)
+            resp = requests.post(url, json=corpo, headers=headers, timeout=TIMEOUT_REQUISICAO_SEGUNDOS)
             if resp.status_code == 429:
                 espera = min(2**tentativa, 60)
                 time.sleep(espera)
@@ -125,6 +139,18 @@ def _nivel_sigilo_eh_publico(hit_source: dict) -> bool:
     return nivel in (None, 0)
 
 
+def _parse_data_ajuizamento(valor):
+    """Converte "yyyyMMddHHmmss" (formato real confirmado em teste ao vivo,
+    não ISO) pra datetime. Retorna None se vier vazio ou num formato
+    inesperado — melhor perder a data do que quebrar o insert inteiro."""
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor[:14], "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
 def _extrair_campos(hit: dict) -> dict:
     fonte = hit.get("_source", {})
     classe = fonte.get("classe") or {}
@@ -138,7 +164,7 @@ def _extrair_campos(hit: dict) -> dict:
         "classe_nome": classe.get("nome"),
         "assunto_codigo": primeiro_assunto.get("codigo"),
         "assunto_nome": primeiro_assunto.get("nome"),
-        "data_ajuizamento": fonte.get("dataAjuizamento"),
+        "data_ajuizamento": _parse_data_ajuizamento(fonte.get("dataAjuizamento")),
         "valor_causa": fonte.get("valorCausa"),
         "orgao_julgador": orgao.get("nome"),
         "grau": fonte.get("grau"),

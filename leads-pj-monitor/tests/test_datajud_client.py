@@ -1,13 +1,20 @@
 """Testes da extração de campos do retorno do DataJud (app/datajud_client.py).
-Usa um payload sintético no formato esperado do Elasticsearch — não bate na
-API real (ver nota no topo de app/datajud_client.py sobre o que foi validado
-ao vivo e o que não foi)."""
+Payload sintético, mas no formato REAL confirmado contra a API ao vivo com
+a chave pública do CNJ (ver nota no topo de app/datajud_client.py) — inclui
+o detalhe de "dataAjuizamento" vir como string compacta "yyyyMMddHHmmss",
+não ISO, que é exatamente o que essas datas no exemplo abaixo reproduzem."""
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.datajud_client import _extrair_campos, _montar_query, _nivel_sigilo_eh_publico
+from app.datajud_client import (
+    _extrair_campos,
+    _montar_query,
+    _nivel_sigilo_eh_publico,
+    _parse_data_ajuizamento,
+)
 
 
 def _hit_exemplo(**sobrescritas):
@@ -15,7 +22,7 @@ def _hit_exemplo(**sobrescritas):
         "numeroProcesso": "00012345620268260100",
         "classe": {"codigo": 1116, "nome": "Execução Fiscal"},
         "assuntos": [{"codigo": 7771, "nome": "Dívida Ativa"}],
-        "dataAjuizamento": "2026-01-15T00:00:00Z",
+        "dataAjuizamento": "20260115083000",
         "valorCausa": 15000.50,
         "orgaoJulgador": {"nome": "1ª Vara de Execuções Fiscais"},
         "grau": "G1",
@@ -23,6 +30,16 @@ def _hit_exemplo(**sobrescritas):
     }
     fonte.update(sobrescritas)
     return {"_source": fonte, "sort": [fonte["dataAjuizamento"], "id-exemplo"]}
+
+
+def test_parse_data_ajuizamento_formato_real():
+    assert _parse_data_ajuizamento("20260730012658") == datetime(2026, 7, 30, 1, 26, 58)
+
+
+def test_parse_data_ajuizamento_vazio_ou_invalido_retorna_none():
+    assert _parse_data_ajuizamento(None) is None
+    assert _parse_data_ajuizamento("") is None
+    assert _parse_data_ajuizamento("não é uma data") is None
 
 
 def test_extrair_campos_processo_publico():
@@ -33,6 +50,7 @@ def test_extrair_campos_processo_publico():
     assert campos["assunto_codigo"] == 7771
     assert campos["valor_causa"] == 15000.50
     assert campos["sigiloso"] is False
+    assert campos["data_ajuizamento"] == datetime(2026, 1, 15, 8, 30, 0)
 
 
 def test_extrair_campos_sem_nivel_sigilo_trata_como_publico():
