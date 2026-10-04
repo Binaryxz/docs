@@ -80,12 +80,15 @@ def test_nivel_sigilo_eh_publico():
 
 
 def test_montar_query_com_classes_e_assuntos():
-    query = _montar_query([1116, 156], [7771], "2026-01-01")
+    # "data_minima" no formato compacto "yyyyMMddHHmmss" — é o que
+    # coletar_tribunal() de fato passa pra cá (ver nota no módulo: um
+    # range filter em formato ISO não filtra nada contra esse campo).
+    query = _montar_query([1116, 156], [7771], "20260101000000")
     assert {"terms": {"classe.codigo": [1116, 156]}} in query["bool"]["must"]
     assert {"terms": {"assuntos.codigo": [7771]}} in query["bool"]["must"]
-    assert query["bool"]["filter"] == [{"range": {"dataAjuizamento": {"gte": "2026-01-01"}}}]
+    assert query["bool"]["filter"] == [{"range": {"dataAjuizamento": {"gte": "20260101000000"}}}]
 
 
 def test_montar_query_sem_classes_nem_assuntos():
-    query = _montar_query([], [], "2026-01-01")
+    query = _montar_query([], [], "20260101000000")
     assert "must" not in query["bool"]

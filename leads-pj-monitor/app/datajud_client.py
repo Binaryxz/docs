@@ -12,20 +12,32 @@ pra Juizado Especial Cível do TJSP) — ficam None/vazio quando ausentes, sem
 quebrar nada; "partes" é por isso mesmo que o Módulo 2 (raspagem por
 tribunal) existe.
 
-**Achado importante testando ao vivo**: essa API é LENTA e inconsistente —
-uma consulta simples (size=1, sem filtro) levou ~36s; a mesma consulta com
-filtro de data + ordenação (o padrão usado na paginação real) excedeu 60s e
-voltou 504 do próprio gateway do CNJ. Isso não parece ser específico da chave
-pública compartilhada (a autenticação em si responde rápido mesmo com chave
-errada) — é característica da API sob carga. Por isso o timeout de requisição
-é bem mais generoso que o usual (ver TIMEOUT_REQUISICAO_SEGUNDOS) e o
-retry/backoff é essencial, não opcional: espere páginas ocasionalmente
-levarem mais de um minuto, e múltiplas tentativas até uma página passar.
+**Achado importante testando ao vivo**: essa API é LENTA — mesmo uma
+consulta simples (size=1, sem filtro) levou ~36-60s. Isso não parece ser
+específico da chave pública compartilhada (autenticação errada responde
+rápido) — é característica da API sob carga. Por isso o timeout de
+requisição é bem mais generoso que o usual (ver TIMEOUT_REQUISICAO_SEGUNDOS)
+e o retry/backoff é essencial: espere páginas ocasionalmente levarem mais de
+um minuto.
 
-"dataAjuizamento" vem como string compacta "yyyyMMddHHmmss" (ex:
-"20260730012658"), não ISO — convertido explicitamente em `_extrair_campos`
-antes de gravar no Postgres (gravar a string bruta direto quebraria o cast
-pra TIMESTAMPTZ).
+**Dois bugs reais de verdade, só visíveis testando contra a API ao vivo**
+(nenhum dos dois aparecia num teste sintético, por mais cuidadoso que
+fosse — a API simplesmente não documenta isso):
+
+1. Sort por "_id" como critério de desempate é **rejeitado** por este
+   cluster ("Fielddata access on the _id field is disallowed") — erro 400,
+   não timeout. "numeroProcesso" sozinho também falha (é "text", sem
+   fielddata); o sub-campo "numeroProcesso.keyword" é o que funciona de
+   verdade (testado, HTTP 200).
+2. "dataAjuizamento" não é um campo "date" do Elasticsearch, é texto no
+   formato compacto "yyyyMMddHHmmss" (ex: "20260730012658") — e um filtro
+   "range/gte" em formato ISO ("2026-09-27") **não filtra nada**: testei
+   com "gte: 2099-01-01" (data impossível) e voltou o total inteiro do
+   índice, sem filtrar. Só filtra de verdade usando o mesmo formato
+   compacto como valor do "gte". `_extrair_campos` converte o valor pra
+   datetime antes de gravar no Postgres (gravar a string bruta direto
+   quebraria o cast pra TIMESTAMPTZ); `coletar_tribunal` monta o "gte" já
+   nesse formato.
 """
 import time
 from dataclasses import dataclass, field
@@ -100,7 +112,12 @@ def _requisitar_pagina(
     corpo = {
         "size": TAMANHO_PAGINA,
         "query": query,
-        "sort": [{"dataAjuizamento": "asc"}, {"_id": "asc"}],
+        # "_id" como critério de desempate é REJEITADO por este cluster
+        # ("Fielddata access on the _id field is disallowed") — confirmado
+        # em teste real (erro 400, não timeout). "numeroProcesso" sozinho
+        # também falha (é "text", sem fielddata) — o sub-campo ".keyword"
+        # é a forma correta e testada que funciona.
+        "sort": [{"dataAjuizamento": "asc"}, {"numeroProcesso.keyword": "asc"}],
     }
     if search_after:
         corpo["search_after"] = search_after
@@ -235,7 +252,11 @@ def coletar_tribunal(tribunal: str, api_key: str) -> ResultadoColeta:
     assuntos_codigos = [a["codigo"] for a in (get_config("assuntos_tpu") or [])]
     dias_retroativos = get_config("dias_retroativos_busca")
 
-    data_minima = (datetime.now(timezone.utc) - timedelta(days=dias_retroativos)).strftime("%Y-%m-%d")
+    # "dataAjuizamento" não é um campo "date" do Elasticsearch — é texto no
+    # formato compacto "yyyyMMddHHmmss" (confirmado em teste real: um filtro
+    # "gte" em formato ISO "yyyy-MM-dd" não filtra NADA, volta o total
+    # inteiro do índice; no formato compacto, filtra corretamente).
+    data_minima = (datetime.now(timezone.utc) - timedelta(days=dias_retroativos)).strftime("%Y%m%d%H%M%S")
     query = _montar_query(classes_codigos, assuntos_codigos, data_minima)
 
     search_after = _cursor_salvo(tribunal)
