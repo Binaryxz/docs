@@ -5,12 +5,44 @@ no Brasil, cruza com dados públicos de CNPJ e dívida ativa, filtra empresas
 pelo perfil que você configurar, e organiza tudo numa tela — sem precisar
 programar nada depois de instalado.
 
-**Status desta versão (Fase 1 do projeto):** coleta de processos (DataJud),
-importação da Receita Federal e da PGFN, casamento com CNPJ, filtros e
-pontuação de leads, painel e tela de leads. **Ainda não incluído** (fases
-seguintes): raspagem de partes diretamente nos sites dos tribunais quando o
-DataJud não traz isso pronto (Fase 2), enriquecimento de telefone/e-mail via
-FonteData/BigDataCorp e exportação no CSV de campanha (Fase 3).
+**Status desta versão (Fase 1 do projeto, + início da Fase 3):** coleta de
+processos (DataJud), importação da Receita Federal e da PGFN, casamento com
+CNPJ, filtros (por padrão só empresas ATIVA e de porte ME/EPP — veja
+"Filtros de qualificação" abaixo) e pontuação de leads, painel e tela de
+leads, e validação de WhatsApp do telefone da empresa via CheckNumber.AI.
+**Ainda não incluído**: raspagem de partes diretamente nos sites dos
+tribunais quando o DataJud não traz isso pronto (Fase 2), enriquecimento de
+telefone/e-mail de sócio via FonteData/BigDataCorp e exportação no CSV de
+campanha (resto da Fase 3).
+
+### Validação de WhatsApp (CheckNumber.AI)
+
+Depois que um lead é qualificado ("em análise"), o sistema pode checar se o
+telefone da empresa (cadastrado na Receita Federal) tem WhatsApp ativo —
+sem conectar nenhum número seu, sem QR code. Isso roda:
+
+- Automaticamente, ao final do pipeline diário (respeitando os tetos de
+  gasto diário/mensal configurados).
+- Manualmente, pelo botão "Validar WhatsApp agora" na aba Enriquecimento
+  de Configurações.
+
+Para ativar: crie uma conta em https://checknumber.ai, copie sua chave de
+API e cole na aba Enriquecimento de Configurações (fica salva criptografada
+no banco, nunca em texto puro). Custo cobrado por eles em dólar por número
+consultado (~US$ 0,02–0,05); resultado fica em cache por 30 dias por
+padrão, pra não pagar duas vezes pelo mesmo número. Antes de validar um
+lote grande pela primeira vez, use "Calibrar com 2 números conhecidos" (um
+que você sabe que tem WhatsApp, outro que não tem) pra confirmar que a
+integração está respondendo certo.
+
+### Filtros de qualificação (padrão: só PME e ativa)
+
+Por padrão o sistema só qualifica empresas com situação cadastral **ATIVA**
+e porte **ME ou EPP** (`filtro_somente_me_epp`) — empresas de porte "demais"
+(grande/médio-grande pela própria classificação da Receita) são
+descartadas antes de chegar à tela de Leads, além dos filtros de capital
+social, natureza jurídica e lista de marcas grandes que já existiam. Esses
+filtros são ajustáveis na aba "Filtros de qualificação" de Configurações.
 
 ---
 
@@ -98,13 +130,14 @@ coleta, por exemplo, já reagenda sozinho ao salvar).
 
 ## 4. Entendendo as telas
 
-- **Painel**: visão geral — quantos leads novos, gasto do mês (quando o
-  enriquecimento entrar, Fase 3), status das últimas coletas, e um alerta
+- **Painel**: visão geral — quantos leads novos, gasto do mês com
+  enriquecimento (CheckNumber.AI), status das últimas coletas, e um alerta
   de atraso por tribunal (tempo entre o processo ser ajuizado e aparecer
   aqui — se isso disparar, pode ser que o DataJud esteja atrasado pra
   aquele tribunal específico, o que é normal variar).
-- **Leads**: a lista principal, com todos os filtros combináveis. Clique
-  num lead pra ver detalhe (sócios, dívida PGFN) e mudar o status.
+- **Leads**: a lista principal, com todos os filtros combináveis (inclui
+  filtro por status de WhatsApp validado). Clique num lead pra ver detalhe
+  (sócios, dívida PGFN, WhatsApp) e mudar o status.
 - **Revisão manual**: casos em que o nome da empresa no processo não bateu
   com confiança suficiente contra nenhum CNPJ da Receita — você decide se
   aceita a sugestão ou descarta.
@@ -183,5 +216,15 @@ real do container — por isso só fazem sentido rodando assim, dentro dele.
 - Sem raspagem própria por tribunal ainda (Módulo 2): o campo de partes só
   vem preenchido quando o próprio DataJud já trouxer isso no retorno
   (varia por tribunal).
-- Sem enriquecimento de telefone/e-mail de sócio por provedor pago, e sem
-  o botão de exportação no CSV de campanha — ambos chegam na Fase 3.
+- Sem enriquecimento de telefone/e-mail de sócio por provedor pago (FonteData/
+  BigDataCorp), e sem o botão de exportação no CSV de campanha — ambos ainda
+  ficam faltando pra fechar a Fase 3. O que já existe (CheckNumber.AI) só
+  confirma se o telefone da própria empresa (cadastro na Receita) tem
+  WhatsApp — não descobre nem valida telefone/e-mail de sócio.
+- A API da CheckNumber.AI devolve o custo de cada tarefa como
+  `{"amount": "0.045000", "currency": "USD"}`, não como um número simples —
+  confirmado rodando contra a API real (a doc pública deles sugere outro
+  formato). Se um dia a API deles mudar esse formato de novo, o botão
+  "Validar WhatsApp agora" vai gravar o custo errado silenciosamente (sem
+  travar a aplicação) — vale checar de vez em quando o gasto registrado
+  contra o saldo real em https://checknumber.ai.

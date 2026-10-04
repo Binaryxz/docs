@@ -75,6 +75,9 @@ with st.expander("Filtros", expanded=True):
         "Status", status_opcoes, default=filtros_do_nicho.get("status", ["em_analise"])
     )
 
+    whatsapp_opcoes = {"Qualquer": None, "Tem WhatsApp": True, "Sem WhatsApp": False, "Não validado ainda": "nulo"}
+    whatsapp_escolhido = st.selectbox("WhatsApp (CheckNumber.AI)", list(whatsapp_opcoes.keys()))
+
     col_salvar1, col_salvar2 = st.columns([3, 1])
     nome_novo_nicho = col_salvar1.text_input("Nome para salvar este conjunto de filtros como nicho")
     if col_salvar2.button("💾 Salvar nicho") and nome_novo_nicho:
@@ -136,14 +139,24 @@ if status_selecionados:
     condicoes.append("l.status = ANY(:status)")
     parametros["status"] = status_selecionados
 
+valor_whatsapp = whatsapp_opcoes[whatsapp_escolhido]
+if valor_whatsapp == "nulo":
+    condicoes.append("ce.resultado_json IS NULL")
+elif valor_whatsapp is not None:
+    condicoes.append("(ce.resultado_json ->> 'tem_whatsapp')::boolean = :tem_whatsapp")
+    parametros["tem_whatsapp"] = valor_whatsapp
+
 sql = f"""
     SELECT
         l.id, l.numero_cnj, l.cnpj, er.razao_social, pr.tribunal, pr.uf,
         pr.classe_nome, pr.data_ajuizamento, pr.valor_causa, er.porte_codigo,
-        l.score_lead, l.status, l.metodo_match, l.score_match, l.motivo_descarte
+        l.score_lead, l.status, l.metodo_match, l.score_match, l.motivo_descarte,
+        ce.resultado_json ->> 'tem_whatsapp' AS tem_whatsapp,
+        ce.resultado_json ->> 'telefone_validado' AS telefone_validado
     FROM leads l
     JOIN processos pr ON pr.numero_cnj = l.numero_cnj
     LEFT JOIN empresas_receita er ON er.cnpj = l.cnpj
+    LEFT JOIN cache_enriquecimento ce ON ce.cnpj = l.cnpj AND ce.provedor = 'checknumber'
     WHERE {' AND '.join(condicoes)}
     ORDER BY l.score_lead DESC NULLS LAST
     LIMIT 1000
@@ -169,6 +182,12 @@ if not df_leads.empty:
         st.write("**Tribunal/UF:**", f"{lead['tribunal']} / {lead['uf']}")
         st.write("**Classe:**", lead["classe_nome"])
         st.write("**Valor da causa:**", lead["valor_causa"])
+        if lead["tem_whatsapp"] == "true":
+            st.write("**WhatsApp:**", f"✅ Ativo ({lead['telefone_validado']})")
+        elif lead["tem_whatsapp"] == "false":
+            st.write("**WhatsApp:**", f"❌ Não ativo ({lead['telefone_validado']})")
+        else:
+            st.write("**WhatsApp:**", "— ainda não validado")
 
     socios_df = query_df(
         "SELECT nome_socio, qualificacao, administrador FROM socios WHERE cnpj_basico = :b",

@@ -38,7 +38,11 @@ PADRAO_CONFIG = {
     "teto_capital_social": 10_000_000,
     "naturezas_juridicas_excluidas": ["2046", "2054"],
     "limite_filiais_ativas": 10,
-    "filtro_somente_me_epp": False,
+    # Pedido explícito: só PME (ME/EPP oficial da Receita) e ativa — exclui
+    # qualquer empresa classificada como porte "DEMAIS" (grande/médio-grande
+    # pela própria Receita), além dos filtros de capital/natureza/marca
+    # grande acima, que continuam valendo também.
+    "filtro_somente_me_epp": True,
     "filtro_situacao_ativa": True,
     "valor_causa_minimo": 0,
     "divida_pgfn_minima": 0,
@@ -50,7 +54,10 @@ PADRAO_CONFIG = {
         "numero_execucoes_recentes": 0.20,
     },
     "limiar_similaridade_fuzzy": 85,
-    "provedor_enriquecimento_ativo": "fontedata",
+    # "checknumber" (validação de WhatsApp, CheckNumber.AI) é o primeiro
+    # provedor de fato implementado — fontedata/bigdatacorp (telefone/e-mail
+    # de sócio) seguem como Fase 3, ainda não construídos.
+    "provedor_enriquecimento_ativo": "checknumber",
     "teto_gasto_diario": 50.0,
     "teto_gasto_mensal": 800.0,
     "score_minimo_para_enriquecer": 50,

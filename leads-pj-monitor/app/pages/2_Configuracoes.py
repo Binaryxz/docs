@@ -144,15 +144,32 @@ with aba_score:
         st.success("Salvo.")
 
 with aba_enriquecimento:
-    st.info(
-        "Enriquecimento de contatos (FonteData / BigDataCorp) é a Fase 3 deste projeto — "
-        "ainda não implementado nesta versão. Os campos abaixo já ficam salvos pra quando "
-        "o módulo entrar."
-    )
+    provedores_disponiveis = ["checknumber", "fontedata", "bigdatacorp"]
+    provedor_atual = cfg.get("provedor_enriquecimento_ativo", "checknumber")
+    if provedor_atual not in provedores_disponiveis:
+        provedor_atual = "checknumber"
     provedor = st.selectbox(
-        "Provedor ativo", ["fontedata", "bigdatacorp"],
-        index=["fontedata", "bigdatacorp"].index(cfg.get("provedor_enriquecimento_ativo", "fontedata")),
+        "Provedor ativo", provedores_disponiveis, index=provedores_disponiveis.index(provedor_atual)
     )
+    if provedor in ("fontedata", "bigdatacorp"):
+        st.info(
+            "FonteData/BigDataCorp (telefone/e-mail de sócio) é a Fase 3 deste projeto — "
+            "ainda não implementado nesta versão. Os campos abaixo já ficam salvos pra quando "
+            "o módulo entrar."
+        )
+    else:
+        st.caption(
+            "CheckNumber.AI valida se o telefone da empresa tem WhatsApp ativo, sem conectar "
+            "nenhum número nosso (sem QR code). Custo cobrado em dólar por número consultado."
+        )
+        if cfg.get("chave_api_checknumber"):
+            try:
+                from app.whatsapp_validation import consultar_saldo
+
+                st.metric("Saldo disponível (CheckNumber.AI)", f"US$ {consultar_saldo():.2f}")
+            except Exception as exc:
+                st.warning(f"Não foi possível consultar o saldo agora: {exc}")
+
     chave_api = st.text_input("Chave de API do provedor", type="password")
     teto_diario = st.number_input("Teto de gasto diário (R$)", min_value=0.0, value=float(cfg.get("teto_gasto_diario", 50.0)))
     teto_mensal = st.number_input("Teto de gasto mensal (R$)", min_value=0.0, value=float(cfg.get("teto_gasto_mensal", 800.0)))
@@ -169,6 +186,42 @@ with aba_enriquecimento:
 
             set_config(f"chave_api_{provedor}", cifrar(chave_api))
         st.success("Salvo.")
+
+    if provedor == "checknumber":
+        st.subheader("Validar WhatsApp agora")
+        st.caption(
+            "Roda a validação dos leads qualificados ('em análise') com telefone, respeitando "
+            "cache, score mínimo e tetos de gasto configurados acima."
+        )
+        if st.button("📱 Validar WhatsApp agora"):
+            from app.whatsapp_validation import validar_whatsapp_leads_pendentes
+
+            with st.spinner("Consultando CheckNumber.AI..."):
+                resultado = validar_whatsapp_leads_pendentes()
+            if resultado.erros:
+                for erro in resultado.erros:
+                    st.error(erro)
+            st.success(
+                f"Enviados: {resultado.total_enviados} | Com WhatsApp: {resultado.com_whatsapp} | "
+                f"Sem WhatsApp: {resultado.sem_whatsapp} | Custo: US$ {resultado.custo_real_usd:.2f} | "
+                f"Ignorados (cache): {resultado.ignorados_cache} | Ignorados (sem telefone): "
+                f"{resultado.ignorados_sem_telefone}"
+            )
+
+        with st.expander("Calibrar com 2 números conhecidos (recomendado antes do primeiro uso em lote)"):
+            st.caption(
+                "Checklist do provedor: confirme contra um número que você sabe que tem WhatsApp "
+                "e outro que você sabe que não tem, antes de confiar no resultado em lote."
+            )
+            col_cal1, col_cal2 = st.columns(2)
+            numero_com = col_cal1.text_input("Número COM WhatsApp conhecido (DDD+número)")
+            numero_sem = col_cal2.text_input("Número SEM WhatsApp conhecido (DDD+número)")
+            if st.button("Calibrar") and numero_com and numero_sem:
+                from app.whatsapp_validation import calibrar
+
+                with st.spinner("Consultando CheckNumber.AI..."):
+                    resultado_cal = calibrar(numero_com, numero_sem)
+                st.json(resultado_cal)
 
 with aba_sistema:
     st.subheader("Horário da coleta diária")

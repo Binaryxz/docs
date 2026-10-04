@@ -26,10 +26,11 @@ _lock_execucao_diaria = threading.Lock()
 
 
 def rodar_pipeline_diario() -> dict:
-    """DataJud -> matching -> qualificação. Protegido por lock: se o
-    cron disparar enquanto uma execução manual ("Rodar agora") ainda
-    estiver rodando, essa segunda chamada é ignorada em vez de rodar
-    em paralelo e duplicar trabalho."""
+    """DataJud -> matching -> qualificação -> validação de WhatsApp (só dos
+    leads já qualificados e com score acima do mínimo, respeitando teto de
+    gasto). Protegido por lock: se o cron disparar enquanto uma execução
+    manual ("Rodar agora") ainda estiver rodando, essa segunda chamada é
+    ignorada em vez de rodar em paralelo e duplicar trabalho."""
     if not _lock_execucao_diaria.acquire(blocking=False):
         return {"ignorado": True, "motivo": "já existe uma execução em andamento"}
 
@@ -41,11 +42,13 @@ def rodar_pipeline_diario() -> dict:
         resultado_coleta = executar_coleta_completa()
         resultado_matching = processar_matching_pendentes()
         resultado_qualificacao = qualificar_leads_pendentes()
+        resultado_whatsapp = _rodar_validacao_whatsapp()
 
         return {
             "coleta": [vars(r) for r in resultado_coleta],
             "matching": resultado_matching,
             "qualificacao": resultado_qualificacao,
+            "whatsapp": vars(resultado_whatsapp),
         }
     finally:
         _lock_execucao_diaria.release()
@@ -67,6 +70,22 @@ def _rodar_import_pgfn() -> None:
     from app.pgfn_import import executar_importacao_pgfn
 
     executar_importacao_pgfn()
+
+
+def _rodar_validacao_whatsapp():
+    """Chamada ao fim do pipeline diário e pelo botão manual de
+    Configurações. Não lança exceção pro chamador — qualquer erro vem
+    dentro do próprio resultado (campo "erros"), porque ela já é a última
+    etapa do pipeline automático e não deve derrubar coleta/matching/
+    qualificação que já rodaram com sucesso antes dela."""
+    from app.whatsapp_validation import ResultadoValidacaoWhatsapp, validar_whatsapp_leads_pendentes
+
+    try:
+        return validar_whatsapp_leads_pendentes()
+    except Exception as exc:  # defeito de rede/provedor não deve derrubar o pipeline diário
+        resultado = ResultadoValidacaoWhatsapp()
+        resultado.erros.append(f"Falha inesperada na validação de WhatsApp: {exc}")
+        return resultado
 
 
 def execucao_esta_em_andamento() -> bool:
