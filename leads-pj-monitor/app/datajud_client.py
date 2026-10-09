@@ -66,6 +66,15 @@ class ResultadoColeta:
 
 
 def _cursor_salvo(tribunal: str) -> list | None:
+    """CUIDADO ao aumentar "dias_retroativos_busca" com um cursor já salvo:
+    a ordenação é ascendente por data, então um cursor salvo com a janela
+    antiga já avançou pra além do início da janela nova (mais antiga) —
+    "search_after" só devolve resultados DEPOIS do cursor, então os
+    processos mais antigos recém-incluídos pela janela maior seriam
+    pulados silenciosamente. Zere `config_kv` (chaves "datajud_cursor_*")
+    antes de ampliar a janela de um tribunal que já tem cursor salvo; a
+    tabela `processos` descarta duplicata por numero_cnj, então reprocessar
+    desde o início é seguro, só mais lento."""
     row = fetch_one(
         "SELECT valor_json FROM config_kv WHERE chave = :chave",
         {"chave": f"datajud_cursor_{tribunal}"},
