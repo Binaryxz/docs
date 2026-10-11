@@ -1,0 +1,26 @@
+diff --git a/src/agent/loop.ts b/src/agent/loop.ts
+index aad1427..32608d5 100644
+--- a/src/agent/loop.ts
++++ b/src/agent/loop.ts
+@@ -408,7 +408,7 @@ export async function runAgentLoop(
+ 
+       // Check for unprocessed inbox messages using the state machine:
+       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
+-      if (!pendingInput) {
++      if (!pendingInput || pendingInput.source === "wakeup") {
+         claimedMessages = claimInboxMessages(db.raw, 10);
+         if (claimedMessages.length > 0) {
+           const formatted = claimedMessages
+@@ -421,7 +421,11 @@ export async function runAgentLoop(
+               return `[Message from ${from.content}]: ${content.content}`;
+             })
+             .join("\n\n");
+-          pendingInput = { content: formatted, source: "agent" };
++          // Mensagens que causaram o despertar entram já no turno de wakeup,
++          // para o modelo não voltar a dormir sem vê-las.
++          pendingInput = pendingInput
++            ? { content: `${pendingInput.content}\n\n${formatted}`, source: "agent" }
++            : { content: formatted, source: "agent" };
+         }
+       }
+ 

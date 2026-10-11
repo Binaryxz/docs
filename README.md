@@ -1,3 +1,12 @@
+## 🤖 Plataforma Multi-Agente
+
+Crie e orquestre times de agentes autônomos com OLMo 3 32B (LLM aberto da AI2), Conway Automaton e LangGraph, com interface web. Roda localmente (Ollama/vLLM), com OmniRoute e n8n opcionais, e tem deploy pronto para a Flux.
+
+- 📖 **[Guia completo](plataforma-multiagente/guia.mdx)**
+- 💻 **[Código](plataforma-multiagente)**
+
+---
+
 ## 🎯 Prospecção Fintech
 
 Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no Brasil: filtro por CNAE/capital social na base de CNPJ da Receita Federal, identificação do decisor (sócio-administrador), validação de telefone (formato + WhatsApp ativo) e enriquecimento via IA.
