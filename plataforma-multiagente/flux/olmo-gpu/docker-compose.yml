@@ -1,0 +1,70 @@
+# OLMo 3.1 32B Instruct numa GPU da FluxEdge (ou qualquer máquina com GPU NVIDIA de 24 GB+).
+# Expõe uma API compatível com OpenAI protegida por chave, para a plataforma usar como LLM_BASE_URL.
+#
+#   export OLMO_API_KEY=$(openssl rand -hex 24)   # guarde: vai no .env da plataforma
+#   docker compose up -d
+#   docker compose logs -f pull                    # baixa o modelo (~19 GB) uma vez
+#
+# Teste: curl http://IP:8080/v1/models -H "Authorization: Bearer $OLMO_API_KEY"
+services:
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_CONTEXT_LENGTH: "32768"
+      OLLAMA_NUM_PARALLEL: "4"
+    volumes:
+      - ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  pull:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${OLMO_MODEL:-olmo-3.1:32b-instruct}"]
+    restart: "no"
+
+  # Gateway: só repassa requisições com "Authorization: Bearer $OLMO_API_KEY".
+  gateway:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [ollama]
+    environment:
+      OLMO_API_KEY: ${OLMO_API_KEY:?defina OLMO_API_KEY}
+      SITE: ${DOMAIN:-:8080}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    ports:
+      - "${PORT:-8080}:8080"
+      - "443:443"
+    volumes:
+      - caddy:/data
+
+configs:
+  caddyfile:
+    content: |
+      {$$SITE} {
+        @autorizado header Authorization "Bearer {$$OLMO_API_KEY}"
+        handle @autorizado {
+          reverse_proxy ollama:11434 {
+            transport http {
+              response_header_timeout 10m
+            }
+          }
+        }
+        respond "unauthorized" 401
+      }
+
+volumes:
+  ollama:
+  caddy:

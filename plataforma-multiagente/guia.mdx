@@ -194,6 +194,18 @@ Os nós comuns da FluxCloud não têm GPU, e o 32B em CPU fica lento demais para
 1. **Recomendado:** alugar uma GPU na **[FluxEdge](https://docs.runonflux.com/fluxedge/overview/)** (marketplace de GPUs da Flux — RTX 4090, A6000, A100, H100) e subir o vLLM ou o Ollama lá, com o mesmo comando do perfil `vllm` deste compose. Use o endpoint resultante em `LLM_BASE_URL`, de preferência atrás de HTTPS com uma API key (por exemplo, colocando o OmniRoute na frente).
 2. **Só para testes:** um terceiro componente com Ollama em CPU e `olmo-3:7b-instruct`.
 
+### OLMo na FluxEdge com a plataforma no seu computador
+
+Se o seu computador não tem GPU nem espaço para o modelo (~20 GB), separe as partes: o OLMo roda na FluxEdge com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu) (Ollama + gateway com chave) e a plataforma roda local sem o perfil `ollama`, ocupando ~1 GB:
+
+```bash
+# .env da plataforma
+COMPOSE_PROFILES=
+LLM_BASE_URL=http://IP-DA-GPU:8080/v1
+LLM_API_KEY=<OLMO_API_KEY definido na GPU>
+LLM_MODEL=olmo-3.1:32b-instruct
+```
+
 ### Passo a passo
 
 ```bash
