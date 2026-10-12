@@ -157,6 +157,20 @@ A Flux roda containers Docker em nós descentralizados. A spec em [`flux/app-spe
 
 Os nós comuns da FluxCloud não têm GPU, então o OLMo 3 32B roda numa GPU alugada na **[FluxEdge](https://docs.runonflux.com/fluxedge/overview/)** (marketplace de GPUs da Flux — RTX 4090, A6000, A100, H100) com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu): Ollama servindo o OLMo atrás de um gateway que só aceita requisições com a sua chave. Use o endereço dele em `LLM_BASE_URL`.
 
+## LLM sem GPU própria (NVIDIA / OmniRoute)
+
+A plataforma fala com qualquer API compatível com OpenAI, então dá para usar o LLM de um provedor em vez de uma GPU sua. Tire `olmo` do `COMPOSE_PROFILES` e configure o `.env`:
+
+- **NVIDIA** ([build.nvidia.com](https://build.nvidia.com)) — grátis dentro dos limites deles, dezenas de modelos abertos:
+  ```
+  LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+  LLM_API_KEY=nvapi-...
+  LLM_MODEL=meta/llama-3.1-70b-instruct
+  ```
+- **OmniRoute** — gateway que agrega vários provedores (muitos com nível grátis) num só endpoint; cadastre os provedores no painel dele e use `LLM_MODEL=auto`.
+
+Sobre "tokens infinitos": não há cobrança por token nesses caminhos, mas cada provedor tem limites de uso (rate limit). "Ilimitado" de verdade, sem depender de terceiros, só com o OLMo auto-hospedado na sua GPU/FluxEdge.
+
 ### OLMo na FluxEdge com a plataforma no seu computador
 
 Se o seu computador não tem GPU nem espaço para o modelo (~20 GB), separe as partes: o OLMo roda na FluxEdge com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu) (Ollama + gateway com chave) e a plataforma roda local sem o perfil `olmo`, ocupando ~1 GB:
