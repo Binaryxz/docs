@@ -96,6 +96,9 @@ services:
       - platform:/data
     ports:
       - "${UI_BIND:-127.0.0.1}:8080:8000"
+    # Permite LLM_BASE_URL=http://host.docker.internal:11434/v1 (Ollama nativo no host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   automaton-runner:
     build: ./automaton-runner
