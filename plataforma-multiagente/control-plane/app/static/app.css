@@ -1,0 +1,98 @@
+/* Painel: layout sobre theme.css. Barra de topo, abas estilo terminal e grade
+   1fr/2fr (formulário | listas) que vira coluna única no celular. */
+
+.binfield { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; opacity: .14; }
+.binfield span {
+  position: absolute; top: -60%; font-size: 12px; line-height: 1.2; color: var(--green);
+  writing-mode: vertical-rl; text-orientation: upright; white-space: nowrap;
+  animation: fall linear infinite;
+}
+@keyframes fall { to { transform: translateY(200vh); } }
+
+.masthead {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap;
+  padding: 14px var(--gutter); border-bottom: 1px solid var(--line); background: rgba(0, 0, 0, .85);
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; backdrop-filter: blur(4px);
+}
+.brand { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.status { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.who { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+
+.tabs { display: flex; gap: 4px; padding: 14px var(--gutter) 0; flex-wrap: wrap; }
+.tab {
+  font: inherit; font-size: 13px; cursor: pointer; padding: 7px 14px;
+  background: transparent; color: var(--dim); border: 1px solid transparent; letter-spacing: .04em;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--green); border-color: var(--line); background: var(--panel); text-shadow: 0 0 8px rgba(0, 255, 156, .5); }
+
+main { padding: 16px var(--gutter) 48px; }
+.grid { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.pair { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
+.small { font-size: 12px; }
+h2 { font-size: 14px; letter-spacing: .06em; text-transform: lowercase; color: var(--text); }
+.detail { margin-top: 16px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 12px; cursor: pointer; padding: 3px 10px; color: var(--cyan); background: transparent; border: 1px dashed #0c4a58; }
+.chip:hover { border-style: solid; border-color: var(--cyan); }
+.check { display: flex; gap: 8px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); }
+.check input { width: auto; accent-color: var(--green); }
+fieldset { border: 1px solid var(--line); margin: 0; padding: 10px 12px; }
+legend { font-size: 12px; color: var(--muted); padding: 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+.checks { display: grid; gap: 6px; }
+
+.list { display: grid; gap: 10px; }
+.item { border: 1px solid var(--line); background: var(--ink); padding: 12px; display: grid; gap: 6px; min-width: 0; }
+.item:hover { border-color: var(--green-dim); }
+.item .name { color: var(--green); font-weight: 700; }
+.meta { font-size: 12px; color: var(--dim); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge { font-size: 11px; padding: 1px 8px; border: 1px solid var(--line); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.addr { color: var(--cyan); font-size: 13px; overflow-wrap: anywhere; }
+.bal { display: flex; gap: 18px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.bal b { color: var(--green); font-weight: 700; }
+
+.seg { display: flex; }
+.seg .btn { border-radius: 0; }
+.seg .btn[aria-pressed="true"] { background: var(--green); color: var(--on-green); border-color: var(--green); }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 440px; overflow-y: auto; padding-right: 4px; }
+.bubble { max-width: 88%; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; border: 1px solid var(--line); }
+.bubble.to_agent { align-self: flex-end; background: var(--panel-2); }
+.bubble.from_agent { align-self: flex-start; background: rgba(0, 255, 156, .06); border-color: var(--green-dim); }
+.bubble small { display: block; color: var(--dim); font-size: 11px; margin-top: 4px; }
+.send { display: flex; gap: 8px; margin-top: 12px; }
+.term {
+  margin: 0; background: #000; color: var(--green); border: 1px solid var(--line);
+  padding: 12px; max-height: 460px; overflow: auto; font-size: 12px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; text-shadow: 0 0 6px rgba(0, 255, 156, .35);
+}
+
+details.run summary { cursor: pointer; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; list-style: none; }
+details.run summary::-webkit-details-marker { display: none; }
+details.run summary::before { content: "▸"; color: var(--green); }
+details.run[open] summary::before { content: "▾"; }
+.run .task { color: var(--text); flex: 1; min-width: 200px; }
+.run h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin: 14px 0 6px; }
+.run ol { margin: 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+.final { background: #000; border: 1px solid var(--green-dim); padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.st-done, .st-confirmed { color: var(--green); }
+.st-running, .st-queued, .st-pending { color: var(--amber); }
+.st-error, .st-failed { color: var(--red); }
+
+.netbar { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; margin-bottom: 16px; padding: 10px 14px; }
+.netbar .warn { color: var(--amber); }
+.confirm { border: 1px solid var(--amber); color: var(--amber); padding: 10px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg { margin: 0; font-size: 13px; min-height: 1.2em; overflow-wrap: anywhere; }
+.msg.ok { color: var(--green); }
+.msg.err { color: var(--red); }
+
+@media (max-width: 640px) {
+  .masthead { position: static; gap: 8px 14px; padding-block: 10px; }
+  .brand .dim { display: none; }
+  .tabs { padding-top: 10px; }
+  .tab { padding: 6px 10px; }
+}

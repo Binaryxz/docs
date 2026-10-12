@@ -1,96 +1,146 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Plataforma Multi-Agente</title>
-  <link rel="stylesheet" href="/static/styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<title>Painel · Plataforma Multi-Agente</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>Plataforma Multi-Agente</h1>
-    <div id="status" class="status">verificando…</div>
-  </header>
+<div class="binfield" id="binfield" aria-hidden="true"></div>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="agents">Agentes</button>
-    <button class="tab" data-tab="teams">Times</button>
-  </nav>
+<header class="masthead">
+  <div class="brand">
+    <span class="tag">multi-agente</span>
+    <span class="dim">olmo-3 · conway automaton · langgraph · flux</span>
+  </div>
+  <div class="status" id="status"><span class="dim">verificando…</span></div>
+  <div class="who"><span class="dim" id="who"></span><button class="btn small" id="logout">Sair</button></div>
+</header>
 
-  <main>
-    <!-- ─── Agentes ─────────────────────────────────────────── -->
-    <section id="tab-agents" class="panel active">
-      <div class="grid">
-        <div class="card">
-          <h2>Novo agente</h2>
-          <div class="templates" id="templates"></div>
-          <form id="agent-form">
-            <label>Nome <input name="name" required minlength="2" maxlength="60" placeholder="Ex.: Pesquisador"></label>
-            <label>Papel <input name="role" maxlength="200" placeholder="Ex.: pesquisa de mercado"></label>
-            <label>Prompt de gênese
-              <textarea name="genesis_prompt" required minlength="10" rows="5"
-                placeholder="Quem é o agente, o que ele deve fazer e como deve se comportar."></textarea>
-            </label>
-            <label class="inline"><input type="checkbox" name="start" checked> Iniciar no Conway Automaton</label>
-            <button type="submit" class="primary">Criar agente</button>
-          </form>
-        </div>
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="agents" aria-selected="true">[1] Agentes</button>
+  <button class="tab" role="tab" data-tab="teams" aria-selected="false">[2] Times</button>
+  <button class="tab" role="tab" data-tab="wallets" aria-selected="false">[3] Carteiras</button>
+</nav>
 
-        <div class="card wide">
-          <h2>Agentes</h2>
-          <div id="agents" class="agents"><p class="muted">Nenhum agente ainda.</p></div>
+<main>
+  <!-- ─── Agentes ─────────────────────────────────────────── -->
+  <section class="view" id="view-agents">
+    <div class="grid">
+      <form class="panel stack" id="agent-form">
+        <h2 class="prompt">novo agente</h2>
+        <div class="chips" id="templates"></div>
+        <label for="a-name">Nome <input id="a-name" required minlength="2" maxlength="60" placeholder="Pesquisador"></label>
+        <label for="a-role">Papel <input id="a-role" maxlength="200" placeholder="pesquisa de mercado"></label>
+        <label for="a-genesis">Prompt de gênese
+          <textarea id="a-genesis" required minlength="10" rows="5" placeholder="Quem é o agente, o que faz e como se comporta."></textarea>
+        </label>
+        <label class="check" for="a-start"><input type="checkbox" id="a-start" checked> iniciar no Conway Automaton</label>
+        <button class="btn primary" type="submit">Criar agente</button>
+      </form>
+
+      <div class="panel stack">
+        <h2 class="prompt">agentes</h2>
+        <div class="list" id="agents"><p class="dim">nenhum agente.</p></div>
+      </div>
+    </div>
+
+    <div class="panel stack detail" id="agent-detail" hidden>
+      <div class="row">
+        <h2 class="prompt" id="detail-title"></h2>
+        <div class="seg">
+          <button class="btn small" data-view="chat" aria-pressed="true">Conversa</button>
+          <button class="btn small" data-view="logs" aria-pressed="false">Logs</button>
         </div>
       </div>
+      <div id="pane-chat">
+        <div class="chat" id="chat"></div>
+        <form class="send" id="chat-form">
+          <input id="chat-input" required placeholder="mensagem para o agente (entregue no próximo heartbeat, ~1 min)">
+          <button class="btn primary" type="submit">Enviar</button>
+        </form>
+      </div>
+      <pre class="term" id="pane-logs" hidden></pre>
+    </div>
+  </section>
 
-      <div class="card" id="agent-detail" hidden>
-        <div class="detail-head">
-          <h2 id="detail-title"></h2>
-          <div class="seg">
-            <button data-view="chat" class="active">Conversa</button>
-            <button data-view="logs">Logs</button>
+  <!-- ─── Times ───────────────────────────────────────────── -->
+  <section class="view" id="view-teams" hidden>
+    <div class="grid">
+      <form class="panel stack" id="run-form">
+        <h2 class="prompt">nova execução</h2>
+        <label for="r-task">Tarefa <textarea id="r-task" required minlength="5" rows="5" placeholder="o que o time deve entregar?"></textarea></label>
+        <fieldset>
+          <legend>agentes do time</legend>
+          <div class="checks" id="team-agents"><p class="dim">crie agentes primeiro.</p></div>
+        </fieldset>
+        <label for="r-exec">Executor
+          <select id="r-exec">
+            <option value="automaton">Conway Automaton (autônomo)</option>
+            <option value="llm">OLMo direto (rápido, sem ferramentas)</option>
+          </select>
+        </label>
+        <button class="btn primary" type="submit">Executar com LangGraph</button>
+      </form>
+      <div class="panel stack">
+        <h2 class="prompt">execuções</h2>
+        <div class="list" id="runs"><p class="dim">nenhuma execução.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Carteiras ───────────────────────────────────────── -->
+  <section class="view" id="view-wallets" hidden>
+    <div class="netbar panel" id="netbar"><span class="dim">rede…</span></div>
+    <div class="grid">
+      <div class="stack">
+        <form class="panel stack" id="wallet-form">
+          <h2 class="prompt">nova carteira</h2>
+          <label for="w-label">Nome <input id="w-label" maxlength="60" value="Tesouraria"></label>
+          <button class="btn primary" type="submit">Gerar carteira</button>
+          <p class="dim small">A chave privada é gerada e guardada no container dos agentes. Ela nunca aparece no painel.</p>
+        </form>
+
+        <form class="panel stack" id="transfer-form">
+          <h2 class="prompt">enviar</h2>
+          <label for="t-from">De <select id="t-from" required></select></label>
+          <label for="t-to">Para (endereço) <input id="t-to" required pattern="^0x[0-9a-fA-F]{40}$" placeholder="0x…"></label>
+          <div class="pair">
+            <label for="t-amount">Valor <input id="t-amount" required inputmode="decimal" pattern="^\d+(\.\d{1,18})?$" placeholder="10"></label>
+            <label for="t-asset">Ativo <select id="t-asset"><option>USDT</option><option>ETH</option></select></label>
           </div>
-        </div>
-        <div id="view-chat">
-          <div id="chat" class="chat"></div>
-          <form id="chat-form" class="row">
-            <input name="content" required placeholder="Mensagem para o agente (entregue no próximo heartbeat, ~1 min)">
-            <button class="primary">Enviar</button>
-          </form>
-        </div>
-        <pre id="view-logs" class="logs" hidden></pre>
-      </div>
-    </section>
+          <label for="t-pass">Sua senha (confirma o envio) <input id="t-pass" type="password" autocomplete="current-password" required></label>
+          <div class="confirm" id="t-confirm" hidden></div>
+          <button class="btn primary" type="submit" id="t-btn">Revisar envio</button>
+          <p class="msg" id="t-msg" role="status"></p>
+        </form>
 
-    <!-- ─── Times ───────────────────────────────────────────── -->
-    <section id="tab-teams" class="panel">
-      <div class="grid">
-        <div class="card">
-          <h2>Nova execução</h2>
-          <form id="run-form">
-            <label>Tarefa
-              <textarea name="task" required minlength="5" rows="5" placeholder="O que o time deve entregar?"></textarea>
-            </label>
-            <fieldset>
-              <legend>Agentes do time</legend>
-              <div id="team-agents" class="checklist"><p class="muted">Crie agentes primeiro.</p></div>
-            </fieldset>
-            <label>Executor
-              <select name="executor">
-                <option value="automaton">Conway Automaton (agentes autônomos)</option>
-                <option value="llm">LLM direto (rápido, sem ferramentas)</option>
-              </select>
-            </label>
-            <button type="submit" class="primary">Executar com LangGraph</button>
-          </form>
+        <form class="panel stack" id="sign-form">
+          <h2 class="prompt">assinar mensagem</h2>
+          <label for="s-from">Carteira <select id="s-from" required></select></label>
+          <label for="s-msg">Mensagem <textarea id="s-msg" rows="3" required></textarea></label>
+          <button class="btn" type="submit">Assinar</button>
+          <pre class="term small" id="s-out" hidden></pre>
+        </form>
+      </div>
+
+      <div class="stack">
+        <div class="panel stack">
+          <div class="row"><h2 class="prompt">carteiras</h2><button class="btn small" id="w-refresh">Atualizar saldos</button></div>
+          <div class="list" id="wallets"><p class="dim">carregando…</p></div>
         </div>
-        <div class="card wide">
-          <h2>Execuções</h2>
-          <div id="runs" class="runs"><p class="muted">Nenhuma execução ainda.</p></div>
+        <div class="panel stack">
+          <h2 class="prompt">transações</h2>
+          <div class="list" id="txs"><p class="dim">nenhuma transação.</p></div>
         </div>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
+</main>
 
-  <script src="/static/app.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>
