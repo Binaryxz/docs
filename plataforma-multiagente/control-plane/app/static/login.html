@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<title>Entrar · Plataforma Multi-Agente</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  main { min-height: 100vh; display: grid; place-items: center; padding: 24px var(--gutter); }
+  .box { width: min(400px, 100%); display: grid; gap: 16px; }
+  h1 { font-size: 20px; }
+  form { display: grid; gap: 14px; }
+  .err { color: var(--red); font-size: 13px; min-height: 1.2em; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <section class="panel box">
+    <p class="tag">plataforma multi-agente</p>
+    <h1 class="cursor">Entrar</h1>
+    <form id="f">
+      <label for="u">Usuário <input id="u" autocomplete="username" required value="admin"></label>
+      <label for="p">Senha <input id="p" type="password" autocomplete="current-password" required autofocus></label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <p class="err" id="e" role="alert"></p>
+    </form>
+  </section>
+</main>
+<script>
+document.getElementById("f").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = ev.target.querySelector("button"), err = document.getElementById("e");
+  btn.disabled = true; err.textContent = "";
+  try {
+    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: document.getElementById("u").value, password: document.getElementById("p").value }) });
+    if (r.ok) { location.href = "/app"; return; }
+    err.textContent = (await r.json().catch(() => ({}))).detail || "Não foi possível entrar.";
+  } catch { err.textContent = "Servidor indisponível."; }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

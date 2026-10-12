@@ -1,0 +1,96 @@
+# Plataforma multi-agente. Stack:
+#   LLM ............ OLMo 3 32B (olmo-3.1:32b-instruct)
+#   Agentes ........ Conway Automaton
+#   Orquestração ... LangGraph (control-plane) e n8n
+#   Hosting ........ Flux (flux/app-spec.json; OLMo na FluxEdge: flux/olmo-gpu)
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# Perfis (COMPOSE_PROFILES no .env, separados por vírgula):
+#   olmo   OLMo 3 32B nesta mesma máquina (precisa de GPU NVIDIA de 24 GB+)
+#   n8n    editor de fluxos visuais
+# Sem o perfil "olmo", aponte LLM_BASE_URL para o OLMo na FluxEdge (flux/olmo-gpu).
+#
+# GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Painel: http://localhost:8080
+
+name: plataforma-multiagente
+
+services:
+  # ─── LLM: OLMo 3 32B ────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-32768}
+    profiles: ["olmo"]
+
+  # Baixa o OLMo uma vez (≈19 GB, 32B quantizado) e sai.
+  ollama-pull:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${OLLAMA_MODEL:-olmo-3.1:32b-instruct}"]
+    restart: "no"
+    profiles: ["olmo"]
+
+  # ─── Plataforma ─────────────────────────────────────────────────────
+  control-plane:
+    build: ./control-plane
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUNNER_URL: http://automaton-runner:7000
+      DB_PATH: /data/platform.db
+    volumes:
+      - platform:/data
+    ports:
+      - "${UI_BIND:-127.0.0.1}:8080:8000"
+    # Permite LLM_BASE_URL=http://host.docker.internal:11434/v1 (OLMo servido no próprio host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  automaton-runner:
+    build: ./automaton-runner
+    restart: unless-stopped
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?defina RUNNER_TOKEN no .env}
+      ETH_NETWORK: ${ETH_NETWORK:-mainnet}
+      ETH_RPC_URL: ${ETH_RPC_URL:-}
+      USDT_CONTRACT: ${USDT_CONTRACT:-}
+      MAX_USDT_PER_TX: ${MAX_USDT_PER_TX:-100}
+      MAX_ETH_PER_TX: ${MAX_ETH_PER_TX:-0.05}
+    volumes:
+      - agents:/data
+    # Sem portas publicadas: só o control plane fala com o runner.
+
+  # ─── Orquestração visual: n8n ───────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      PLATFORM_URL: http://control-plane:8000
+      PLATFORM_TOKEN: ${ADMIN_TOKEN:-}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    volumes:
+      - n8n:/home/node/.n8n
+    ports:
+      - "127.0.0.1:5678:5678"
+    profiles: ["n8n"]
+
+volumes:
+  ollama:
+  platform:
+  agents:
+  n8n:

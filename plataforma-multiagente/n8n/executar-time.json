@@ -1,0 +1,54 @@
+{
+  "name": "Multiagente - executar time via webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "multiagente",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "3b8f1d2e-6f0a-4c51-9d7e-multiagente"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PLATFORM_URL }}/api/runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.PLATFORM_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.body.task, agent_ids: $json.body.agent_ids, executor: $json.body.executor || 'automaton', wait: true }) }}",
+        "options": { "timeout": 3600000 }
+      },
+      "name": "Executar time (LangGraph)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ run_id: $json.id, status: $json.status, final: $json.final, error: $json.error }) }}",
+        "options": {}
+      },
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Executar time (LangGraph)", "type": "main", "index": 0 }]] },
+    "Executar time (LangGraph)": { "main": [[{ "node": "Responder", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

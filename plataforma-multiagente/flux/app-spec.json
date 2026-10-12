@@ -1,0 +1,67 @@
+{
+  "version": 8,
+  "name": "multiagente",
+  "description": "Plataforma multi-agente: OLMo 3 32B + Conway Automaton + LangGraph/n8n na Flux",
+  "owner": "SEU_ZELID",
+  "instances": 3,
+  "staticip": false,
+  "enterprise": "",
+  "contacts": [],
+  "geolocation": [],
+  "nodes": [],
+  "expire": 22000,
+  "compose": [
+    {
+      "name": "controlplane",
+      "description": "API, UI, LangGraph e emulação Conway",
+      "repotag": "docker.io/SEU_USUARIO/multiagente-control-plane:0.1.0",
+      "ports": [
+        38080
+      ],
+      "containerPorts": [
+        8000
+      ],
+      "domains": [
+        ""
+      ],
+      "environmentParameters": [
+        "LLM_BASE_URL=http://IP-DA-GPU-FLUXEDGE:8080/v1",
+        "LLM_MODEL=olmo-3.1:32b-instruct",
+        "LLM_API_KEY=OLMO_API_KEY_DA_GPU",
+        "RUNNER_URL=http://fluxrunner_multiagente:7000",
+        "RUNNER_TOKEN=TROQUE",
+        "ADMIN_USER=admin",
+        "ADMIN_PASSWORD=TROQUE",
+        "DB_PATH=/data/platform.db"
+      ],
+      "commands": [],
+      "containerData": "g:/data",
+      "cpu": 1,
+      "ram": 1024,
+      "hdd": 5,
+      "tiered": false,
+      "secrets": "",
+      "repoauth": ""
+    },
+    {
+      "name": "runner",
+      "description": "Processos Conway Automaton (um por agente)",
+      "repotag": "docker.io/SEU_USUARIO/multiagente-automaton-runner:0.1.0",
+      "ports": [],
+      "containerPorts": [],
+      "domains": [],
+      "environmentParameters": [
+        "CONTROL_PLANE_URL=http://fluxcontrolplane_multiagente:8000",
+        "RUNNER_TOKEN=TROQUE"
+      ],
+      "commands": [],
+      "containerData": "g:/data",
+      "cpu": 2,
+      "ram": 4096,
+      "hdd": 20,
+      "tiered": false,
+      "secrets": "",
+      "repoauth": ""
+    }
+  ]
+}

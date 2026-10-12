@@ -60,7 +60,8 @@
     {
       "group": "Guides",
       "pages": [
-        "prospeccao-fintech/guia"
+        "prospeccao-fintech/guia",
+        "plataforma-multiagente/guia"
       ]
     },
     {

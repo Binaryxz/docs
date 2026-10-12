@@ -1,3 +1,12 @@
+## 🤖 Plataforma Multi-Agente
+
+Times de agentes autônomos com OLMo 3 32B, Conway Automaton e LangGraph/n8n, hospedados na Flux, com interface web.
+
+- 📖 **[Guia completo](plataforma-multiagente/guia.mdx)**
+- 💻 **[Código](plataforma-multiagente)**
+
+---
+
 ## 🎯 Prospecção Fintech
 
 Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no Brasil: filtro por CNAE/capital social na base de CNPJ da Receita Federal, identificação do decisor (sócio-administrador), validação de telefone (formato + WhatsApp ativo) e enriquecimento via IA.
