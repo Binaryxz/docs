@@ -17,7 +17,9 @@ RUN git init -q . \
 # Patches locais (ver patches/): pequenos ajustes de comportamento sobre o upstream.
 COPY patches /tmp/patches
 RUN git apply /tmp/patches/*.patch
-RUN corepack enable \
+# CI=true: sem TTY no build, o pnpm aborta o prune em vez de pedir confirmação.
+RUN export CI=true \
+ && corepack enable \
  && pnpm install --frozen-lockfile \
  && pnpm build \
  && pnpm prune --prod
