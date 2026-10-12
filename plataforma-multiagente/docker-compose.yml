@@ -1,31 +1,25 @@
-# Plataforma multi-agente: OLMo 3 + Conway Automaton + LangGraph (+ n8n / OmniRoute opcionais).
+# Plataforma multi-agente. Stack:
+#   LLM ............ OLMo 3 32B (olmo-3.1:32b-instruct)
+#   Agentes ........ Conway Automaton
+#   Orquestração ... LangGraph (control-plane) e n8n
+#   Hosting ........ Flux (flux/app-spec.json; OLMo na FluxEdge: flux/olmo-gpu)
 #
-#   cp .env.example .env        # COMPOSE_PROFILES escolhe os serviços opcionais
+#   cp .env.example .env
 #   docker compose up -d --build
 #
 # Perfis (COMPOSE_PROFILES no .env, separados por vírgula):
-#   ollama     OLMo via Ollama (CPU ou GPU; padrão)
-#   vllm       OLMo via vLLM (GPU NVIDIA obrigatória)
-#   omniroute  gateway OmniRoute na frente do LLM (fallback/roteamento)
-#   n8n        editor de fluxos visuais
+#   olmo   OLMo 3 32B nesta mesma máquina (precisa de GPU NVIDIA de 24 GB+)
+#   n8n    editor de fluxos visuais
+# Sem o perfil "olmo", aponte LLM_BASE_URL para o OLMo na FluxEdge (flux/olmo-gpu).
 #
-# GPU para o Ollama: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 #
-# UI: http://localhost:8080
+# Painel: http://localhost:8080
 
 name: plataforma-multiagente
 
-x-gpu: &gpu
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
-
 services:
-  # ─── LLM ────────────────────────────────────────────────────────────
+  # ─── LLM: OLMo 3 32B ────────────────────────────────────────────────
   ollama:
     image: ollama/ollama:${OLLAMA_VERSION:-latest}
     restart: unless-stopped
@@ -36,9 +30,9 @@ services:
     environment:
       OLLAMA_KEEP_ALIVE: 24h
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-32768}
-    profiles: ["ollama"]
+    profiles: ["olmo"]
 
-  # Baixa o modelo uma vez (≈19 GB para o 32B quantizado) e sai.
+  # Baixa o OLMo uma vez (≈19 GB, 32B quantizado) e sai.
   ollama-pull:
     image: ollama/ollama:${OLLAMA_VERSION:-latest}
     depends_on: [ollama]
@@ -46,43 +40,7 @@ services:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${OLLAMA_MODEL:-olmo-3.1:32b-instruct}"]
     restart: "no"
-    profiles: ["ollama"]
-
-  # Alternativa de produção com GPU: pesos oficiais da AI2 em BF16/FP8.
-  vllm:
-    image: vllm/vllm-openai:${VLLM_VERSION:-latest}
-    restart: unless-stopped
-    ipc: host
-    volumes:
-      - hf-cache:/root/.cache/huggingface
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-    command:
-      - --model=${VLLM_MODEL:-allenai/Olmo-3.1-32B-Instruct}
-      - --served-model-name=${VLLM_SERVED_NAME:-olmo-3-32b}
-      - --max-model-len=${VLLM_MAX_MODEL_LEN:-32768}
-      - --tensor-parallel-size=${VLLM_TP:-1}
-      - --enable-auto-tool-choice
-      - --tool-call-parser=olmo3
-    ports:
-      - "127.0.0.1:8001:8000"
-    profiles: ["vllm"]
-    <<: *gpu
-
-  # Gateway OpenAI-compatível com fallback/balanceamento entre provedores.
-  omniroute:
-    image: ${OMNIROUTE_IMAGE:-diegosouzapw/omniroute:latest}
-    restart: unless-stopped
-    environment:
-      REQUIRE_API_KEY: "true"
-      INITIAL_PASSWORD: ${OMNIROUTE_PASSWORD:-}
-      OMNIROUTE_LOCAL_DIRECT_HEADERS_TIMEOUT_MS: "600000"
-      STREAM_IDLE_TIMEOUT_MS: "600000"
-    volumes:
-      - omniroute:/app/data
-    ports:
-      - "127.0.0.1:20128:20128"
-    profiles: ["omniroute"]
+    profiles: ["olmo"]
 
   # ─── Plataforma ─────────────────────────────────────────────────────
   control-plane:
@@ -96,7 +54,7 @@ services:
       - platform:/data
     ports:
       - "${UI_BIND:-127.0.0.1}:8080:8000"
-    # Permite LLM_BASE_URL=http://host.docker.internal:11434/v1 (Ollama nativo no host).
+    # Permite LLM_BASE_URL=http://host.docker.internal:11434/v1 (OLMo servido no próprio host).
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -115,7 +73,7 @@ services:
       - agents:/data
     # Sem portas publicadas: só o control plane fala com o runner.
 
-  # ─── Fluxos visuais (opcional) ──────────────────────────────────────
+  # ─── Orquestração visual: n8n ───────────────────────────────────────
   n8n:
     image: n8nio/n8n:${N8N_VERSION:-latest}
     restart: unless-stopped
@@ -133,8 +91,6 @@ services:
 
 volumes:
   ollama:
-  hf-cache:
-  omniroute:
   platform:
   agents:
   n8n:

@@ -1,6 +1,6 @@
 ## 🤖 Plataforma Multi-Agente
 
-Crie e orquestre times de agentes autônomos com OLMo 3 32B (LLM aberto da AI2), Conway Automaton e LangGraph, com interface web. Roda localmente (Ollama/vLLM), com OmniRoute e n8n opcionais, e tem deploy pronto para a Flux.
+Times de agentes autônomos com OLMo 3 32B, Conway Automaton e LangGraph/n8n, hospedados na Flux, com interface web.
 
 - 📖 **[Guia completo](plataforma-multiagente/guia.mdx)**
 - 💻 **[Código](plataforma-multiagente)**

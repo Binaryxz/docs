@@ -10,7 +10,7 @@ def _env(name: str, default: str = "") -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    # LLM: qualquer endpoint OpenAI-compatível (Ollama, vLLM, OmniRoute, ...).
+    # LLM: OLMo 3 32B servido pelo Ollama (local ou na FluxEdge), via API compatível com OpenAI.
     llm_base_url: str = _env("LLM_BASE_URL", "http://ollama:11434/v1").rstrip("/")
     llm_api_key: str = _env("LLM_API_KEY", "local")
     llm_model: str = _env("LLM_MODEL", "olmo-3.1:32b-instruct")

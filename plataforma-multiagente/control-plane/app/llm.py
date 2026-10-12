@@ -1,4 +1,4 @@
-"""Cliente do LLM (OLMo 3) atrás de qualquer endpoint OpenAI-compatível.
+"""Cliente do LLM (OLMo 3 32B), servido pelo Ollama com API compatível com OpenAI.
 
 O mesmo cliente atende:
   - o proxy que os agentes Automaton usam (`forward`), e
@@ -23,7 +23,7 @@ def _headers() -> dict:
 
 
 def normalize_body(body: dict) -> dict:
-    """Força o modelo configurado e remove campos que Ollama/vLLM rejeitam.
+    """Força o modelo configurado e remove campos que o Ollama rejeita.
 
     O Automaton escolhe modelos pelo nome (gpt-5.2, gpt-5-mini, ...). Aqui
     qualquer nome é reescrito para o OLMo configurado em LLM_MODEL.

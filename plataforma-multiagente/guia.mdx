@@ -1,6 +1,6 @@
 ---
 title: 'Plataforma Multi-Agente (OLMo 3 + Conway Automaton)'
-description: 'Crie e orquestre times de agentes autônomos com OLMo 3 32B, Conway Automaton e LangGraph, com interface web, rodando localmente, via OmniRoute ou na Flux'
+description: 'Times de agentes autônomos com OLMo 3 32B, Conway Automaton e LangGraph/n8n, hospedados na Flux'
 icon: 'robot'
 ---
 
@@ -9,7 +9,7 @@ icon: 'robot'
 ```mermaid
 flowchart LR
     UI[UI web / API REST] --> CP
-    N8N[n8n<br/>opcional] -->|POST /api/runs| CP
+    N8N[n8n] -->|POST /api/runs| CP
     subgraph CP[control-plane · FastAPI]
       LG[LangGraph<br/>planejar → despachar → coletar → sintetizar]
       EMU[Emulação Conway<br/>créditos · relay · inferência]
@@ -20,25 +20,21 @@ flowchart LR
       TUN[túnel HTTPS<br/>localhost:8443]
     end
     A1 & A2 & A3 --> TUN --> EMU
-    EMU --> GW{LLM_BASE_URL}
-    LG --> GW
-    GW --> OLL[Ollama<br/>olmo-3.1:32b-instruct]
-    GW --> VLLM[vLLM<br/>allenai/Olmo-3.1-32B-Instruct]
-    GW --> OMNI[OmniRoute<br/>fallback / roteamento]
+    EMU --> OLMO[OLMo 3 32B<br/>Ollama · GPU FluxEdge]
+    LG --> OLMO
 ```
 
 O código completo está em [`/plataforma-multiagente`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente).
 
 | Camada | Escolha | Papel na plataforma |
 |---|---|---|
-| LLM | **OLMo 3 / 3.1 32B Instruct** (AI2, pesos abertos) | Cérebro de todos os agentes e do orquestrador |
+| LLM | **OLMo 3 32B** (`olmo-3.1:32b-instruct`, AI2, pesos abertos) | Cérebro de todos os agentes e do orquestrador |
 | Agente | **[Conway Automaton](https://github.com/Conway-Research/automaton)** | Runtime autônomo de cada agente: loop ReAct, shell, arquivos, memória, heartbeat, SOUL.md |
-| Orquestração | **LangGraph** (nativo) + **n8n** (opcional) | LangGraph divide a tarefa e coordena o time; n8n dispara runs a partir de fluxos visuais |
-| Gateway de LLM | Direto, ou **[OmniRoute](https://github.com/diegosouzapw/OmniRoute)** | Um endpoint OpenAI-compatível com fallback entre Ollama, vLLM e provedores |
-| Hosting | Docker local, ou **[Flux](https://runonflux.com/)** | Mesmo compose roda no notebook; spec pronta para FluxCloud |
+| Orquestração | **LangGraph** + **n8n** | LangGraph divide a tarefa e coordena o time; n8n dispara runs a partir de fluxos visuais |
+| Hosting | **[Flux](https://runonflux.com/)** | OLMo numa GPU da FluxEdge; plataforma na FluxCloud (ou no seu computador para desenvolvimento) |
 
 <Note>
-  **Por que LangGraph como orquestrador principal e n8n como opcional?** A coordenação do time (planejar, esperar respostas assíncronas, sintetizar) é código com estado — LangGraph modela isso diretamente. O n8n entra bem na borda: disparar um time a partir de um formulário, planilha, e-mail ou Slack, e encaminhar o resultado. Os dois convivem: o n8n chama `POST /api/runs`.
+  **Por que LangGraph e n8n juntos?** A coordenação do time (planejar, esperar respostas assíncronas, sintetizar) é código com estado — LangGraph modela isso diretamente. O n8n entra bem na borda: disparar um time a partir de um formulário, planilha, e-mail ou Slack, e encaminhar o resultado. Os dois convivem: o n8n chama `POST /api/runs`.
 </Note>
 
 ## Como o Conway Automaton roda localmente
@@ -73,12 +69,11 @@ Detalhes que fazem isso funcionar:
 
 | Opção | Memória | Observação |
 |---|---|---|
-| Ollama, quantizado (`olmo-3.1:32b-instruct`, ≈19 GB) | GPU de 24 GB (RTX 3090/4090) ou Mac Apple Silicon com 32 GB+ | Recomendado para uso local |
-| Ollama só CPU | 32 GB+ de RAM | Funciona, mas lento (poucos tokens/s) — os agentes ficam lentos junto |
-| vLLM, BF16 (`allenai/Olmo-3.1-32B-Instruct`) | ≈64 GB de VRAM para os pesos + KV cache: 1× H100/A100 80 GB ou 2× 48 GB com `VLLM_TP=2` | Melhor para vários agentes em paralelo |
+| GPU da FluxEdge com o OLMo ([`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu)) | 24 GB+ de VRAM (RTX 4090, A6000, A100, H100) | Recomendado: a plataforma ocupa ~1 GB onde rodar |
+| OLMo na mesma máquina da plataforma (perfil `olmo`) | GPU de 24 GB e ~20 GB de disco | Tudo num lugar só |
 
 <Tip>
-  Use a variante **Instruct**: é a que suporta chamada de ferramentas, que é como o Automaton age (shell, arquivos, `send_message`). A variante *Think* raciocina mais, mas é mais lenta e menos confiável com tools. Para testar em máquina modesta, `LLM_MODEL=olmo-3:7b-instruct` e `OLLAMA_MODEL=olmo-3:7b-instruct` funcionam com a mesma plataforma.
+  Use a variante **Instruct**: é a que suporta chamada de ferramentas, que é como o Automaton age (shell, arquivos, `send_message`). A variante *Think* raciocina mais, mas é mais lenta e menos confiável com tools.
 </Tip>
 
 ## Rodando localmente
@@ -86,16 +81,17 @@ Detalhes que fazem isso funcionar:
 ```bash
 cd plataforma-multiagente
 cp .env.example .env
-# edite RUNNER_TOKEN (openssl rand -hex 24)
+# edite RUNNER_TOKEN e ADMIN_PASSWORD (openssl rand -hex 24)
 
-docker compose up -d --build                      # CPU
-# ou, com GPU NVIDIA:
+# OLMo na mesma máquina (GPU NVIDIA):
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+docker compose logs -f ollama-pull                # download do OLMo (~19 GB)
 
-docker compose logs -f ollama-pull                # acompanha o download do modelo (~19 GB)
+# ou OLMo na FluxEdge: tire "olmo" de COMPOSE_PROFILES, ajuste LLM_BASE_URL/LLM_API_KEY e
+docker compose up -d --build
 ```
 
-Abra **http://localhost:8080**. A barra superior mostra se o LLM e o runner do Automaton estão online.
+Abra **http://localhost:8080** e entre com `ADMIN_USER`/`ADMIN_PASSWORD`. A barra superior mostra se o LLM e o runner do Automaton estão online.
 
 ### Criar agentes
 
@@ -139,13 +135,9 @@ curl -X POST localhost:8080/api/runs -H 'Content-Type: application/json' \
 
 Com `ADMIN_TOKEN` definido, envie `-H "Authorization: Bearer $ADMIN_TOKEN"`.
 
-## n8n (opcional)
+## n8n
 
-```bash
-# .env
-COMPOSE_PROFILES=ollama,n8n
-docker compose up -d
-```
+O perfil `n8n` já vem ligado no `.env.example` (`COMPOSE_PROFILES=olmo,n8n`).
 
 1. Abra **http://localhost:5678** e importe [`n8n/executar-time.json`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/n8n/executar-time.json).
 2. Ative o workflow. Ele expõe `POST /webhook/multiagente`, chama `POST /api/runs` com `wait: true` e devolve a entrega final:
@@ -157,50 +149,21 @@ curl -X POST localhost:5678/webhook/multiagente -H 'Content-Type: application/js
 
 Para o caminho inverso (a plataforma avisa o n8n quando um run termina), defina `RUN_WEBHOOK_URL=http://n8n:5678/webhook/run-finalizado` e crie um workflow com esse webhook (ex.: enviar o resultado para Slack ou planilha).
 
-## OmniRoute como gateway (opcional)
-
-O [OmniRoute](https://github.com/diegosouzapw/OmniRoute) é um gateway de IA open source (MIT) que expõe **um** endpoint OpenAI-compatível e roteia para vários provedores, com fallback e balanceamento. Útil para: cair para um provedor externo quando o OLMo local estiver saturado, distribuir carga entre várias GPUs, ou centralizar chaves e logs.
-
-```bash
-# .env
-COMPOSE_PROFILES=ollama,omniroute
-OMNIROUTE_PASSWORD=uma-senha-forte
-```
-
-1. `docker compose up -d` e abra **http://localhost:20128**.
-2. Cadastre o Ollama como provedor OpenAI-compatível com base URL `http://ollama:11434/v1` (ou o vLLM em `http://vllm:8000/v1`).
-3. Copie a API key em **Dashboard → Endpoints** e ajuste o `.env`:
-
-```bash
-LLM_BASE_URL=http://omniroute:20128/v1
-LLM_MODEL=ollama/olmo-3.1:32b-instruct   # nome do modelo como aparece no OmniRoute
-LLM_API_KEY=sk-...
-```
-
-4. `docker compose up -d control-plane` para aplicar.
-
-<Warning>
-  O gateway enxerga todos os prompts e respostas e guarda as chaves dos provedores. Mantenha `REQUIRE_API_KEY=true` (já configurado no compose) e a porta 20128 restrita a `127.0.0.1`.
-</Warning>
-
 ## Deploy na Flux
 
 A Flux roda containers Docker em nós descentralizados. A spec em [`flux/app-spec.json`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/app-spec.json) tem dois componentes: `controlplane` (UI/API, porta pública 38080) e `runner` (agentes, sem porta pública).
 
 ### Onde roda o OLMo 32B
 
-Os nós comuns da FluxCloud não têm GPU, e o 32B em CPU fica lento demais para agentes. Duas opções:
-
-1. **Recomendado:** alugar uma GPU na **[FluxEdge](https://docs.runonflux.com/fluxedge/overview/)** (marketplace de GPUs da Flux — RTX 4090, A6000, A100, H100) e subir o vLLM ou o Ollama lá, com o mesmo comando do perfil `vllm` deste compose. Use o endpoint resultante em `LLM_BASE_URL`, de preferência atrás de HTTPS com uma API key (por exemplo, colocando o OmniRoute na frente).
-2. **Só para testes:** um terceiro componente com Ollama em CPU e `olmo-3:7b-instruct`.
+Os nós comuns da FluxCloud não têm GPU, então o OLMo 3 32B roda numa GPU alugada na **[FluxEdge](https://docs.runonflux.com/fluxedge/overview/)** (marketplace de GPUs da Flux — RTX 4090, A6000, A100, H100) com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu): Ollama servindo o OLMo atrás de um gateway que só aceita requisições com a sua chave. Use o endereço dele em `LLM_BASE_URL`.
 
 ### OLMo na FluxEdge com a plataforma no seu computador
 
-Se o seu computador não tem GPU nem espaço para o modelo (~20 GB), separe as partes: o OLMo roda na FluxEdge com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu) (Ollama + gateway com chave) e a plataforma roda local sem o perfil `ollama`, ocupando ~1 GB:
+Se o seu computador não tem GPU nem espaço para o modelo (~20 GB), separe as partes: o OLMo roda na FluxEdge com [`flux/olmo-gpu`](https://github.com/binaryxz/docs/tree/main/plataforma-multiagente/flux/olmo-gpu) (Ollama + gateway com chave) e a plataforma roda local sem o perfil `olmo`, ocupando ~1 GB:
 
 ```bash
 # .env da plataforma
-COMPOSE_PROFILES=
+COMPOSE_PROFILES=n8n
 LLM_BASE_URL=http://IP-DA-GPU:8080/v1
 LLM_API_KEY=<OLMO_API_KEY definido na GPU>
 LLM_MODEL=olmo-3.1:32b-instruct
@@ -213,7 +176,7 @@ LLM_MODEL=olmo-3.1:32b-instruct
 ./flux/publicar-imagens.sh seu_usuario_dockerhub 0.1.0
 ```
 
-2. Em `flux/app-spec.json`, troque `SEU_ZELID`, `SEU_USUARIO`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` e os três `TROQUE` (o mesmo `RUNNER_TOKEN` nos dois componentes; um `ADMIN_TOKEN` forte — a UI fica pública).
+2. Em `flux/app-spec.json`, troque `SEU_ZELID`, `SEU_USUARIO`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` e os `TROQUE` (o mesmo `RUNNER_TOKEN` nos dois componentes; uma `ADMIN_PASSWORD` forte, porque o painel fica público).
 3. Registre o app em [cloud.runonflux.com](https://cloud.runonflux.com) (Register New App → modo avançado/JSON) e pague a assinatura.
 4. Acesse `https://multiagente.app.runonflux.io` (ou o domínio que você configurar).
 
@@ -230,14 +193,14 @@ Notas da spec:
 
 - **Os agentes executam comandos de verdade.** Sem sandbox Conway, o `exec` do Automaton roda dentro do container do runner (usuário `node`, sem acesso ao Docker do host, sem portas publicadas). Todos os agentes compartilham esse container, então um agente consegue ler os arquivos de outro. Para isolar times diferentes, suba um runner por time.
 - **O runtime do Automaton fica somente-leitura** (`/opt/automaton` pertence ao root), então a automodificação de um agente não afeta os outros.
-- **As carteiras são reais** (chaves EVM em `/data/agents/<id>/.automaton/wallet.json`). Não deposite fundos nelas no modo local.
-- **Exposição:** por padrão a UI escuta só em `127.0.0.1`. Ao expor (`UI_BIND=0.0.0.0` ou Flux), defina `ADMIN_TOKEN`.
+- **As carteiras são reais** (chaves EVM em `/data/agents/<id>/.automaton/wallet.json` e `/data/wallets/`). Transferências de USDT/ETH pedem a senha do painel e respeitam `MAX_USDT_PER_TX`/`MAX_ETH_PER_TX`. Teste antes com `ETH_NETWORK=sepolia`.
+- **Exposição:** por padrão o painel escuta só em `127.0.0.1`. Ao expor (`UI_BIND=0.0.0.0` ou Flux), defina `ADMIN_PASSWORD` e use HTTPS (`COOKIE_SECURE=true`).
 
 ## Estrutura
 
 ```
 plataforma-multiagente/
-├── docker-compose.yml          # ollama | vllm | omniroute | n8n + plataforma
+├── docker-compose.yml          # OLMo (perfil olmo) + n8n + plataforma
 ├── docker-compose.gpu.yml      # GPU NVIDIA para o Ollama
 ├── .env.example
 ├── control-plane/              # FastAPI + LangGraph + UI
@@ -251,9 +214,10 @@ plataforma-multiagente/
 ├── automaton-runner/           # Conway Automaton (commit fixo) + supervisor multi-agente
 │   ├── Dockerfile
 │   ├── server.mjs              # API do runner + túnel HTTPS
+│   ├── wallets.mjs             # carteiras EVM e USDT/ETH na Ethereum
 │   └── patches/
 ├── n8n/executar-time.json
-└── flux/                       # spec da Flux + script de publicação de imagens
+└── flux/                       # spec da FluxCloud, OLMo na FluxEdge (olmo-gpu/) e publicação de imagens
 ```
 
 ## Como foi validado
