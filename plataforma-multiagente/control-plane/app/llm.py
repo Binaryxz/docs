@@ -22,6 +22,22 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {settings.llm_api_key}", "Content-Type": "application/json"}
 
 
+def llm_unreachable_reason() -> str:
+    """Mensagem clara para quando o OLMo não responde — a causa mais comum é
+    o endereço não ter sido configurado no .env."""
+    url = settings.llm_base_url
+    if not url or "GPU-IP" in url or "IP-DA-GPU" in url:
+        return (
+            "O OLMo ainda não foi configurado. Edite LLM_BASE_URL e LLM_API_KEY no .env "
+            "com o endereço da GPU (FluxEdge) que serve o OLMo 3 32B e rode "
+            "`docker compose up -d --force-recreate`."
+        )
+    return (
+        f"Não consegui falar com o OLMo em {url}. Verifique se a GPU está no ar, "
+        "se o endereço e a chave (LLM_API_KEY) estão certos e se a porta está acessível."
+    )
+
+
 def normalize_body(body: dict) -> dict:
     """Força o modelo configurado e remove campos que o Ollama rejeita.
 
@@ -45,8 +61,8 @@ async def forward(body: dict, agent_id: str | None) -> tuple[int, dict]:
     started = time.monotonic()
     try:
         resp = await _client.post(f"{settings.llm_base_url}/chat/completions", json=payload, headers=_headers())
-    except httpx.HTTPError as err:
-        return 502, {"error": {"message": f"LLM indisponível em {settings.llm_base_url}: {err}"}}
+    except httpx.HTTPError:
+        return 502, {"error": {"message": llm_unreachable_reason()}}
     latency = int((time.monotonic() - started) * 1000)
     try:
         data = resp.json()
@@ -68,9 +84,12 @@ async def chat(messages: list[dict], *, temperature: float = 0.2, max_tokens: in
 
 
 async def health() -> dict:
+    url = settings.llm_base_url
+    if not url or "GPU-IP" in url or "IP-DA-GPU" in url:
+        return {"ok": False, "configured": settings.llm_model, "error": llm_unreachable_reason()}
     try:
-        resp = await _client.get(f"{settings.llm_base_url}/models", headers=_headers(), timeout=5)
+        resp = await _client.get(f"{url}/models", headers=_headers(), timeout=5)
         models = [m.get("id") for m in resp.json().get("data", [])] if resp.status_code == 200 else []
         return {"ok": resp.status_code == 200, "models": models, "configured": settings.llm_model}
-    except (httpx.HTTPError, ValueError) as err:
-        return {"ok": False, "error": str(err), "configured": settings.llm_model}
+    except (httpx.HTTPError, ValueError):
+        return {"ok": False, "configured": settings.llm_model, "error": llm_unreachable_reason()}

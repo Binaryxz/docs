@@ -96,3 +96,8 @@ details.run[open] summary::before { content: "▾"; }
   .tabs { padding-top: 10px; }
   .tab { padding: 6px 10px; }
 }
+
+.banner {
+  border: 1px solid var(--amber); color: var(--amber); background: rgba(255, 176, 0, .06);
+  padding: 10px 14px; margin-bottom: 16px; font-size: 13px; overflow-wrap: anywhere;
+}

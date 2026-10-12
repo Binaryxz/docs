@@ -193,6 +193,9 @@ async def execute_run(run_id: str) -> None:
     try:
         if not agents:
             raise RuntimeError("nenhum agente válido no time")
+        health = await llm.health()
+        if not health.get("ok"):
+            raise RuntimeError(health.get("error") or "O OLMo não está disponível.")
         result = await GRAPH.ainvoke(state)
         db.update_run(run_id, status="done", final=result.get("final", ""))
         db.add_run_event(run_id, "Concluído")

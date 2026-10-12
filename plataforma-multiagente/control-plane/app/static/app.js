@@ -58,6 +58,24 @@ async function loadMe() {
   try { const me = await api("/api/me"); $("who").textContent = me.user ? `@${me.user}` : ""; } catch {}
 }
 
+function setLlmOffline(reason) {
+  let banner = $("llm-banner");
+  if (reason) {
+    if (!banner) {
+      banner = el("div", { id: "llm-banner", class: "banner" });
+      document.querySelector("main").prepend(banner);
+    }
+    banner.textContent = `OLMo offline — ${reason}`;
+  } else if (banner) {
+    banner.remove();
+  }
+  const runBtn = document.querySelector("#run-form button[type=submit]");
+  if (runBtn) {
+    runBtn.disabled = Boolean(reason);
+    runBtn.title = reason ? "conecte o OLMo para executar" : "";
+  }
+}
+
 async function loadStatus() {
   try {
     const s = await api("/api/status");
@@ -65,6 +83,7 @@ async function loadStatus() {
       el("span", {}, el("span", { class: `dot ${s.llm.ok ? "ok" : "err"}` }), `olmo: ${s.llm.configured}`),
       el("span", {}, el("span", { class: `dot ${s.runner.ok ? "ok" : "warn"}` }), `automaton: ${s.runner.ok ? "online" : "offline"}`),
     );
+    setLlmOffline(s.llm.ok ? "" : (s.llm.error || "sem resposta"));
   } catch (err) {
     $("status").textContent = `erro: ${err.message}`;
   }
