@@ -22,7 +22,11 @@ class Settings:
 
     # Plataforma.
     db_path: str = _env("DB_PATH", "/data/platform.db")
-    admin_token: str = _env("ADMIN_TOKEN", "")
+    admin_token: str = _env("ADMIN_TOKEN", "")  # token Bearer para automações (n8n)
+    admin_user: str = _env("ADMIN_USER", "admin")
+    admin_password: str = _env("ADMIN_PASSWORD", "")  # vazio = sem login (só em 127.0.0.1)
+    session_secret: str = _env("SESSION_SECRET", "")
+    cookie_secure: bool = _env("COOKIE_SECURE", "false").lower() == "true"
     run_timeout_s: int = int(_env("RUN_TIMEOUT_S", "1800"))
     run_webhook_url: str = _env("RUN_WEBHOOK_URL", "")  # ex.: webhook do n8n
 

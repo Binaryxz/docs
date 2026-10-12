@@ -31,7 +31,7 @@ RUN apt-get update \
 # O código do Automaton fica somente-leitura para os agentes (rodam como `node`):
 # a automodificação não consegue alterar o runtime compartilhado entre agentes.
 COPY --from=build /opt/automaton /opt/automaton
-COPY server.mjs entrypoint.sh /opt/runner/
+COPY server.mjs wallets.mjs entrypoint.sh /opt/runner/
 RUN chmod 755 /opt/runner/entrypoint.sh \
  && mkdir -p /data && chown node:node /data
 USER node

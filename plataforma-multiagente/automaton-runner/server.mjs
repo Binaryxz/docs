@@ -16,6 +16,7 @@ import https from "node:https";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import * as wallets from "./wallets.mjs";
 
 const AUTOMATON_DIR = process.env.AUTOMATON_DIR || "/opt/automaton";
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -229,6 +230,17 @@ const api = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true });
 
+    if (parts[0] === "wallets") {
+      if (parts.length === 1 && req.method === "GET") return send(res, 200, { network: wallets.networkInfo(), wallets: wallets.listWallets() });
+      if (parts.length === 1 && req.method === "POST") return send(res, 201, wallets.createWallet((await readJson(req)).label));
+      if (parts[1] === "tx" && parts[2] && req.method === "GET") return send(res, 200, await wallets.txStatus(parts[2]));
+      const walletId = decodeURIComponent(parts[1] || "");
+      if (parts[2] === "balance" && req.method === "GET") return send(res, 200, await wallets.balance(walletId));
+      if (parts[2] === "sign" && req.method === "POST") return send(res, 200, await wallets.signMessage(walletId, (await readJson(req)).message));
+      if (parts[2] === "transfer" && req.method === "POST") return send(res, 200, await wallets.transfer(walletId, await readJson(req)));
+      return send(res, 404, { error: "not found" });
+    }
+
     if (parts[0] !== "agents") return send(res, 404, { error: "not found" });
 
     if (parts.length === 1 && req.method === "GET") {
@@ -277,8 +289,8 @@ const api = http.createServer(async (req, res) => {
 
     return send(res, 404, { error: "not found" });
   } catch (err) {
-    log("erro na API:", err);
-    return send(res, 500, { error: String(err?.message || err) });
+    log("erro na API:", err?.shortMessage || err?.message || err);
+    return send(res, 500, { error: String(err?.shortMessage || err?.message || err) });
   }
 });
 

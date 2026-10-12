@@ -17,7 +17,11 @@ async def _call(method: str, path: str, **kwargs) -> httpx.Response:
     except httpx.HTTPError as err:
         raise RuntimeError(f"runner indisponível em {settings.runner_url}: {err}") from err
     if resp.status_code >= 400:
-        raise RuntimeError(f"runner retornou {resp.status_code}: {resp.text[:300]}")
+        try:
+            detail = resp.json().get("error") or resp.text
+        except ValueError:
+            detail = resp.text
+        raise RuntimeError(str(detail)[:300])
     return resp
 
 
@@ -54,3 +58,30 @@ async def health() -> bool:
         return True
     except RuntimeError:
         return False
+
+
+# ─── Carteiras (as chaves ficam no runner) ───────────────────────────
+
+
+async def wallets() -> dict:
+    return (await _call("GET", "/wallets")).json()
+
+
+async def create_wallet(label: str) -> dict:
+    return (await _call("POST", "/wallets", json={"label": label})).json()
+
+
+async def wallet_balance(wallet_id: str) -> dict:
+    return (await _call("GET", f"/wallets/{wallet_id}/balance")).json()
+
+
+async def wallet_sign(wallet_id: str, message: str) -> dict:
+    return (await _call("POST", f"/wallets/{wallet_id}/sign", json={"message": message})).json()
+
+
+async def wallet_transfer(wallet_id: str, to: str, amount: str, asset: str) -> dict:
+    return (await _call("POST", f"/wallets/{wallet_id}/transfer", json={"to": to, "amount": amount, "asset": asset}, timeout=90)).json()
+
+
+async def tx_status(tx_hash: str) -> dict:
+    return (await _call("GET", f"/wallets/tx/{tx_hash}")).json()

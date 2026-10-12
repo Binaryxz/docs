@@ -10,12 +10,9 @@ async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (token()) headers.Authorization = `Bearer ${token()}`;
   const resp = await fetch(path, { ...options, headers });
-  if (resp.status === 401) {
-    const value = prompt("Token de administrador (ADMIN_TOKEN):");
-    if (value !== null) {
-      try { localStorage.setItem("adminToken", value); } catch {}
-      return api(path, options);
-    }
+  if (resp.status === 401 && !path.includes("/transfer")) {
+    location.href = "/login";
+    throw new Error("sessão expirada");
   }
   if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
   const type = resp.headers.get("content-type") || "";

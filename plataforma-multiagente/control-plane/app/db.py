@@ -51,6 +51,19 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS wallet_txs (
+  hash TEXT PRIMARY KEY,
+  wallet_id TEXT NOT NULL,
+  asset TEXT NOT NULL,
+  amount TEXT NOT NULL,
+  from_addr TEXT NOT NULL,
+  to_addr TEXT NOT NULL,
+  network TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   task TEXT NOT NULL,

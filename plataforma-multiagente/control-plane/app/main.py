@@ -7,12 +7,12 @@ import unicodedata
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import conway, db, llm, runner, teams
+from . import auth, conway, db, llm, runner, teams
 from .config import settings
 
 
@@ -58,9 +58,6 @@ TEMPLATES = [
 ]
 
 
-def require_admin(authorization: str | None = Header(None)) -> None:
-    if settings.admin_token and authorization != f"Bearer {settings.admin_token}":
-        raise HTTPException(401, "token de administrador inválido")
 
 
 def _slug(name: str) -> str:
@@ -90,12 +87,74 @@ class RunIn(BaseModel):
     wait: bool = False  # bloqueia até terminar (útil no n8n)
 
 
-# ─── UI ──────────────────────────────────────────────────────────────
+class LoginIn(BaseModel):
+    user: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class WalletIn(BaseModel):
+    label: str = Field(default="Tesouraria", max_length=60)
+
+
+class SignIn(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class TransferIn(BaseModel):
+    to: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
+    amount: str = Field(pattern=r"^\d+(\.\d{1,18})?$")
+    asset: str = Field(default="USDT", pattern="^(USDT|ETH)$")
+    password: str = Field(default="", max_length=200)
+
+
+# ─── Páginas ─────────────────────────────────────────────────────────
 
 
 @app.get("/", include_in_schema=False)
-async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+async def root(request: Request):
+    return RedirectResponse("/app" if auth.current_user(request) else "/login", status_code=303)
+
+
+@app.get("/login", include_in_schema=False)
+async def login_page(request: Request):
+    if auth.current_user(request):
+        return RedirectResponse("/app", status_code=303)
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/app", include_in_schema=False)
+async def app_page(request: Request):
+    if not auth.current_user(request):
+        return RedirectResponse("/login", status_code=303)
+    return FileResponse(STATIC_DIR / "app.html")
+
+
+# ─── Sessão ──────────────────────────────────────────────────────────
+
+
+@app.post("/api/login")
+async def login(body: LoginIn, response: Response):
+    if not auth.auth_enabled():
+        return {"user": settings.admin_user}
+    if not auth.check_password(body.user, body.password):
+        await asyncio.sleep(1)  # freia tentativa e erro
+        raise HTTPException(401, "usuário ou senha incorretos")
+    response.set_cookie(
+        auth.COOKIE, auth.make_session(settings.admin_user), max_age=auth.SESSION_TTL_S,
+        httponly=True, samesite="strict", secure=settings.cookie_secure,
+    )
+    return {"user": settings.admin_user}
+
+
+@app.post("/api/logout")
+async def logout(response: Response):
+    response.delete_cookie(auth.COOKIE)
+    return {"ok": True}
+
+
+@app.get("/api/me")
+async def me(request: Request):
+    return {"user": auth.current_user(request), "auth_required": auth.auth_enabled()}
 
 
 @app.get("/healthz", include_in_schema=False)
@@ -105,7 +164,7 @@ async def healthz():
 
 # ─── API ─────────────────────────────────────────────────────────────
 
-api = Depends(require_admin)
+api = Depends(auth.require_user)
 
 
 @app.get("/api/status", dependencies=[api])
@@ -244,3 +303,76 @@ async def create_run(body: RunIn):
     if body.wait:
         await task
     return db.get_run(run_id)
+
+
+# ─── Carteiras e pagamentos (Ethereum) ───────────────────────────────
+
+
+def _runner_error(err: RuntimeError) -> HTTPException:
+    return HTTPException(400, str(err))
+
+
+@app.get("/api/wallets", dependencies=[api])
+async def list_wallets():
+    try:
+        return await runner.wallets()
+    except RuntimeError as err:
+        raise _runner_error(err) from err
+
+
+@app.post("/api/wallets", dependencies=[api], status_code=201)
+async def create_wallet(body: WalletIn):
+    try:
+        return await runner.create_wallet(body.label)
+    except RuntimeError as err:
+        raise _runner_error(err) from err
+
+
+@app.get("/api/wallets/{wallet_id}/balance", dependencies=[api])
+async def wallet_balance(wallet_id: str):
+    try:
+        return await runner.wallet_balance(wallet_id)
+    except RuntimeError as err:
+        raise _runner_error(err) from err
+
+
+@app.post("/api/wallets/{wallet_id}/sign", dependencies=[api])
+async def wallet_sign(wallet_id: str, body: SignIn):
+    try:
+        return await runner.wallet_sign(wallet_id, body.message)
+    except RuntimeError as err:
+        raise _runner_error(err) from err
+
+
+@app.post("/api/wallets/{wallet_id}/transfer")
+async def wallet_transfer(wallet_id: str, body: TransferIn, request: Request):
+    user = auth.require_user(request)
+    # Movimentar dinheiro exige a senha de novo, mesmo com sessão aberta.
+    if settings.admin_password and not auth.check_password(settings.admin_user, body.password):
+        await asyncio.sleep(1)
+        raise HTTPException(401, "senha incorreta: a transferência não foi enviada")
+    try:
+        tx = await runner.wallet_transfer(wallet_id, body.to, body.amount, body.asset)
+    except RuntimeError as err:
+        raise _runner_error(err) from err
+    db.execute(
+        "INSERT INTO wallet_txs (hash, wallet_id, asset, amount, from_addr, to_addr, network, created_by, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (tx["hash"], wallet_id, tx["asset"], tx["amount"], tx["from"], tx["to"], tx["network"], user, db.now()),
+    )
+    return tx
+
+
+@app.get("/api/transactions", dependencies=[api])
+async def transactions():
+    rows = db.query("SELECT * FROM wallet_txs ORDER BY created_at DESC LIMIT 100")
+    for row in rows:
+        if row["status"] == "pending":
+            try:
+                status = (await runner.tx_status(row["hash"]))["status"]
+            except RuntimeError:
+                continue
+            if status != "pending":
+                db.execute("UPDATE wallet_txs SET status = ? WHERE hash = ?", (status, row["hash"]))
+                row["status"] = status
+    return rows
