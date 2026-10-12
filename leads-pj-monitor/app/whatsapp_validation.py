@@ -61,6 +61,19 @@ def normaliza_e164(numero_bruto: str) -> str:
         return ""
     if not digitos.startswith("55") and len(digitos) in (10, 11):
         digitos = "55" + digitos
+
+    # Celular moderno é DDI(55) + DDD(2) + 9 + numero(8) = 13 dígitos. Cadastros
+    # antigos da Receita Federal (de antes da migração nacional do "nono dígito",
+    # concluída em 2016) guardam celular como DDD + 8 dígitos, sem o 9 — achado
+    # real rodando em escala: 627 dos 628 números confirmados no WhatsApp tinham
+    # esse formato de 10 dígitos. Sem essa correção, o número exportado pro
+    # disparo (WATI) não bate com o formato E.164 que a Meta/WhatsApp Business
+    # exige, mesmo quando a própria rede telefônica ainda roteira os dois formatos
+    # pro mesmo destino (por isso a validação "passa" mas o disparo real falha).
+    if digitos.startswith("55") and len(digitos) == 12:
+        ddd, resto = digitos[2:4], digitos[4:]
+        digitos = "55" + ddd + "9" + resto
+
     return "+" + digitos
 
 
