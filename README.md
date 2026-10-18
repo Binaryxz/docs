@@ -5,6 +5,13 @@ Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no 
 - 📖 **[Guia completo](prospeccao-fintech/guia.mdx)**
 - 💻 **[Scripts](prospeccao-fintech/scripts)**
 
+## ⚖️ Prospecção Advocacia & Contabilidade
+
+Mesmo pipeline, com filtro por segmento para escritórios de advocacia empresarial e de contabilidade empresarial (CNAE obrigatório + keywords negativas), validação real de WhatsApp via CheckNumber.AI e saída no template de disparo + WATI.
+
+- 📖 **[Guia completo](prospeccao-advocacia-contabilidade/guia.mdx)**
+- 💻 **[Scripts](prospeccao-advocacia-contabilidade/scripts)**
+
 ---
 
 # Mintlify Starter Kit
