@@ -105,9 +105,10 @@ def test_termos_palavra_inteira_e_prefixo():
     assert f.termos_encontrados("Direito Penal Ltda", neg) == ["PENAL"]
     assert f.termos_encontrados("AUXÍLIO DOENÇA ADV", neg) == ["AUXILIO-DOENCA"]
     assert f.termos_encontrados("danos-morais", neg) == ["DANOS MORAIS"]
-    pos = f.compila_termos(["CORPORAT*", "AUDIT*", "SOCIETARIO"])
+    pos = f.compila_termos(["CORPORAT*", "AUDITOR*", "SOCIETARIO"])
     assert f.termos_encontrados("Jurídico Corporativo", pos) == ["CORPORAT*"]
-    assert f.termos_encontrados("Auditores Independentes", pos) == ["AUDIT*"]
+    assert f.termos_encontrados("Auditores Independentes", pos) == ["AUDITOR*"]
+    assert f.termos_encontrados("Aparelhos Auditivos", pos) == []
     assert f.termos_encontrados("Direito Societário", pos) == ["SOCIETARIO"]
     assert f.termos_encontrados("Societarios", pos) == []
 

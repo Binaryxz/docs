@@ -92,10 +92,13 @@ SEGMENTOS = {
         "cnaes_sinal": {"7020400", "6201501", "6209100", "6311900"},
         "positivas": [
             "ASSESSORIA CONTABIL", "CONTABILIDADE EMPRESARIAL", "CONTABIL EMPRESARIAL",
-            "CONTABILIDADE E AUDITORIA", "AUDITORIA", "AUDIT*", "BPO FINANCEIRO", "BPO FISCAL",
+            "CONTABILIDADE E AUDITORIA", "AUDITORIA", "AUDITOR*", "AUDIT", "BPO FINANCEIRO", "BPO FISCAL",
             "BPO CONTABIL", "CONSULTIVA", "CONSULTORIA CONTABIL", "CONSULTORIA TRIBUTARIA",
             "GESTAO TRIBUTARIA", "PLANEJAMENTO TRIBUTARIO", "CONTABILIDADE GERENCIAL",
             "CONTROLADORIA", "CONTROLLER",
+            # "AUDIT*" (prefixo puro) casava "aparelhos auditivos"/"próteses
+            # auditivas" na base real — AUDITOR* cobre auditor/auditores/
+            # auditoria e AUDIT (palavra) cobre o termo em inglês.
         ],
         "negativas": [
             "MEI", "MEIS", "AUTONOMOS", "PARA MEDICOS", "PARA DENTISTAS", "PROFISSIONAIS LIBERAIS",
@@ -399,7 +402,7 @@ def main() -> None:
     leads = {c: d for c, d in estab_data.items() if c in empresas}
     sem_empresa = len(accepted - set(leads))
     if sem_empresa:
-        print(f"[aviso] {sem_empresa} CNPJs aceitos sem registro em Empresas — ignorados", file=sys.stderr)
+        print(f"[aviso] {sem_empresa} CNPJs aceitos sem estabelecimento ativo ou sem registro em Empresas — ignorados", file=sys.stderr)
     print(f"      candidatos: {len(leads)}", file=sys.stderr)
 
     # Exclusão hard de CNAE principal (cartório etc.)

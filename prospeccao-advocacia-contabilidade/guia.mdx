@@ -87,7 +87,7 @@ done
 | 6920-6/02 | Consultoria e auditoria contábil e tributária | **obrigatório** (um dos dois, peso 2) |
 | 7020400, 6201501, 6209100, 6311900 | consultoria / tech / dados | só sinalizam (ordenação) |
 
-- **Positivas:** ASSESSORIA CONTABIL, CONTABILIDADE EMPRESARIAL, CONTABIL EMPRESARIAL, CONTABILIDADE E AUDITORIA, AUDITORIA, AUDIT\*, BPO FINANCEIRO/FISCAL/CONTABIL, CONSULTIVA, CONSULTORIA CONTABIL/TRIBUTARIA, GESTAO TRIBUTARIA, PLANEJAMENTO TRIBUTARIO, CONTABILIDADE GERENCIAL, CONTROLADORIA, CONTROLLER
+- **Positivas:** ASSESSORIA CONTABIL, CONTABILIDADE EMPRESARIAL, CONTABIL EMPRESARIAL, CONTABILIDADE E AUDITORIA, AUDITORIA, AUDITOR\*, AUDIT, BPO FINANCEIRO/FISCAL/CONTABIL, CONSULTIVA, CONSULTORIA CONTABIL/TRIBUTARIA, GESTAO TRIBUTARIA, PLANEJAMENTO TRIBUTARIO, CONTABILIDADE GERENCIAL, CONTROLADORIA, CONTROLLER
 - **Negativas:** MEI, MEIS, AUTONOMOS, PARA MEDICOS, PARA DENTISTAS, PROFISSIONAIS LIBERAIS, SIMPLES, CURSOS, ESCOLA, EDUCACIONAL, FRANQUIA, PROMOCIONAL, PARA VOCE
 
 As listas ficam editáveis em `SEGMENTOS`, no topo do script.
@@ -108,7 +108,7 @@ As listas ficam editáveis em `SEGMENTOS`, no topo do script.
   - `--incluir-so-keyword`: aceita também quem bateu só a keyword positiva, sem o CNAE do segmento. É a regra literal "CNAE OU keyword", que traz muito falso positivo.
 </Note>
 
-**Como a comparação funciona:** o texto é comparado sem acento, em minúsculas e com a pontuação virando espaço. Cada termo precisa bater como **palavra inteira**. Por isso `MEI` não casa com "Meireles", `PENAL` não casa com "Penalva", e `AUXILIO-DOENCA` casa com "Auxílio Doença". Termo terminado em `*` funciona como prefixo: `CORPORAT*` pega corporativo, corporativa e corporate; `AUDIT*` pega auditoria e auditores.
+**Como a comparação funciona:** o texto é comparado sem acento, em minúsculas e com a pontuação virando espaço. Cada termo precisa bater como **palavra inteira**. Por isso `MEI` não casa com "Meireles", `PENAL` não casa com "Penalva", e `AUXILIO-DOENCA` casa com "Auxílio Doença". Termo terminado em `*` funciona como prefixo: `CORPORAT*` pega corporativo, corporativa e corporate; `AUDITOR*` pega auditor, auditores e auditoria. O `AUDIT*` original da especificação foi trocado porque, na base real, casava "aparelhos auditivos".
 
 ### Teto de capital social
 
@@ -190,7 +190,27 @@ Entram só os leads com `telefone_status=ok` e `tem_whatsapp=sim`, na ordem de r
 
 ## Resultados da primeira rodada
 
-Em andamento: snapshot `2026-09-14`, base nacional completa. Os números entram aqui quando a rodada terminar.
+Snapshot `2026-09-14`, base nacional completa, sem teto de capital.
+
+| | Advocacia | Contábil |
+|---|---|---|
+| CNPJs ativos com o CNAE do segmento | 192.658 | 131.090 |
+| Removidos por keyword negativa | 62 | 1.667 |
+| **Leads finais** | **192.596** | **129.423** |
+| Com decisor identificado | 99% (191.056) | 79% (102.525) |
+| Com keyword positiva | 19% | 20% |
+| Capital social: mediana / p90 / p99 | R$ 10 mil / 50 mil / 200 mil | R$ 10 mil / 100 mil / 800 mil |
+| Acima de R$ 5 milhões | 44 | 259 |
+
+O que os números mostram:
+
+- **Teto de capital quase não filtra.** 99% dos escritórios de advocacia têm capital até R$ 200 mil. O teto de R$ 5M da fintech removeria só 44 leads. Capital social não serve como proxy de porte nesses dois segmentos.
+- **Keywords negativas quase não pegam nada na advocacia** (−62: CRIMINAL 30, FAMILIA 12...). A maioria dos escritórios leva o nome dos sócios ("Silva & Souza Advogados"), então o nome não revela a área de atuação. Escritórios de família ou criminal vão continuar na lista. No contábil o efeito é maior (−1.667), quase todo vindo de SIMPLES (1.421). Isso é provavelmente marca ("Simples Contabilidade"); se for agressivo demais, remova o termo de `SEGMENTOS`.
+- **As keywords positivas da advocacia são quase todas genéricas.** ADVOGADOS ASSOCIADOS (19.666) e SOCIEDADE DE ADVOGADOS (16.516) são só a forma jurídica de qualquer sociedade de advogados. Os termos que indicam de fato perfil empresarial são raros: somando CONSULTORIA/ASSESSORIA JURIDICA, EMPRESARIAL, ADVOCACIA EMPRESARIAL, TRIBUTARIA e CORPORAT\*, são uns 1.700 escritórios. Por isso `--exigir-keyword` devolve ~36 mil sociedades comuns, não ~1.700 escritórios empresariais.
+- **"CNAE OU keyword" (`--incluir-so-keyword`) traz quase só ruído:**
+  - **Advocacia:** +115.825 leads sem o CNAE 6911701, quase todos via EMPRESARIAL (94.856) e CORPORAT\* (14.048). São consultorias de gestão (7020400), serviços de escritório (8211300) e TI, praticamente nenhum escritório de advocacia.
+  - **Contábil:** +7.154. Uma parte é real (ex.: "Bueno Assessoria Contábil" registrada em 7020400), mas também entram próteses auditivas, engenharia "consultiva" etc.
+- **Escritórios de assessoria ao setor público** aparecem no topo do contábil (ex.: "Gestão Pública Auditoria Contábil", "Mérito Público Assessoria"). Se não forem público-alvo, vale adicionar PUBLICA, PUBLICO e MUNICIPAL às negativas do contábil.
 
 ## Checklist
 
