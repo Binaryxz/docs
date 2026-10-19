@@ -77,6 +77,11 @@ etapa_llm() {
   local msg rc
   msg=$(revisao_llm "$prompt" "$SDIR/relatorio.md" "$mcp" "$extras"); rc=$?
   [ "$rc" -eq 2 ] && pular "$msg"
-  [ "$rc" -ne 0 ] && falhar "revisão LLM falhou (código $rc); veja relatorio.md.log"
+  if [ "$rc" -ne 0 ]; then
+    # O CLI escreve o erro da API (ex.: crédito insuficiente) na saída, não no stderr.
+    local motivo
+    motivo=$(head -c 200 "$SDIR/relatorio.md" "$SDIR/relatorio.md.log" 2>/dev/null | tr '\n' ' ')
+    falhar "revisão LLM falhou (código $rc): ${motivo:-veja relatorio.md.log}"
+  fi
   concluir "revisão concluída — $(contar_achados_md "$SDIR/relatorio.md") achado(s)" "$(contar_achados_md "$SDIR/relatorio.md")"
 }
