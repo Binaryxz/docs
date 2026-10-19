@@ -1,0 +1,87 @@
+name: Auditoria Web3
+
+# Actions → "Auditoria Web3" → Run workflow → cole o link do GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: "Repositório a auditar (https://github.com/org/repo)"
+        required: true
+      ref:
+        description: "Branch, tag ou commit (vazio = branch padrão)"
+        required: false
+        default: ""
+      etapas:
+        description: "Só estas etapas, separadas por vírgula (vazio = todas)"
+        required: false
+        default: ""
+      medusa_timeout:
+        description: "Tempo de fuzzing do Medusa em segundos"
+        required: false
+        default: "900"
+
+permissions:
+  contents: read
+
+jobs:
+  auditoria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build da imagem de ferramentas
+        uses: docker/build-push-action@v6
+        with:
+          context: auditoria-web3
+          load: true
+          tags: auditoria-web3:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Rodar auditoria
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+          REF: ${{ inputs.ref }}
+          ETAPAS: ${{ inputs.etapas }}
+          MEDUSA_TIMEOUT: ${{ inputs.medusa_timeout }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ETHSCAN_API_KEY: ${{ secrets.ETHSCAN_API_KEY }}
+          ANTICAPTURE_MCP_API_KEY: ${{ secrets.ANTICAPTURE_MCP_API_KEY }}
+          AUDIT_GITHUB_TOKEN: ${{ secrets.AUDIT_GITHUB_TOKEN }}
+          QUORUM_PAYLOADS: ${{ vars.QUORUM_PAYLOADS }}
+          QUORUM_PROTOCOLO: ${{ vars.QUORUM_PROTOCOLO }}
+          QUORUM_REDE: ${{ vars.QUORUM_REDE }}
+          DAO_ID: ${{ vars.DAO_ID }}
+          NODEPROBE_WEB: ${{ vars.NODEPROBE_WEB }}
+          NODEPROBE_RPC: ${{ vars.NODEPROBE_RPC }}
+        run: |
+          mkdir -p resultados
+          args=("$REPO_URL" --saida /resultados/auditoria)
+          [ -n "$REF" ] && args+=(--ref "$REF")
+          [ -n "$ETAPAS" ] && args+=(--etapas "$ETAPAS")
+          docker run --rm \
+            -e ANTHROPIC_API_KEY -e OPENAI_API_KEY -e ETHSCAN_API_KEY -e ANTICAPTURE_MCP_API_KEY \
+            -e GITHUB_TOKEN="$AUDIT_GITHUB_TOKEN" -e MEDUSA_TIMEOUT \
+            -e QUORUM_PAYLOADS -e QUORUM_PROTOCOLO -e QUORUM_REDE -e DAO_ID \
+            -e NODEPROBE_WEB -e NODEPROBE_RPC \
+            -v "$PWD/resultados:/resultados" auditoria-web3:ci "${args[@]}"
+
+      - name: Resumo
+        if: always()
+        run: |
+          f=resultados/auditoria/RELATORIO.md
+          [ -f "$f" ] && head -c 900000 "$f" >> "$GITHUB_STEP_SUMMARY" || echo "Relatório não gerado" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auditoria-web3
+          path: |
+            resultados/auditoria
+            !resultados/auditoria/repo
+          retention-days: 30

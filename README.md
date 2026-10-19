@@ -1,3 +1,12 @@
+## 🛡️ Auditoria Web3
+
+Pipeline único: cole o link de um repositório do GitHub e ele roda MIESC, SolidityGuard, SymGPT, Medusa, Picus, circom --inspect, BridgeGuard, revisões de privacidade/zkTLS/governança (Anticapture), Quorum e Nodeprobe, e gera um relatório consolidado.
+
+- 📖 **[Como usar](auditoria-web3/README.md)**
+- ▶️ **Actions → Auditoria Web3 → Run workflow**
+
+---
+
 ## 🎯 Prospecção Fintech
 
 Pipeline completo de geração de leads B2B para empresas fintech-adjacentes no Brasil: filtro por CNAE/capital social na base de CNPJ da Receita Federal, identificação do decisor (sócio-administrador), validação de telefone (formato + WhatsApp ativo) e enriquecimento via IA.
