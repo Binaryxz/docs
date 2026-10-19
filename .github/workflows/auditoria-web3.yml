@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       repo_url:
-        description: "Repositório a auditar (https://github.com/org/repo)"
+        description: "Repositório a auditar (https://github.com/org/repo) ou pasta deste branch (ex: alvo)"
         required: true
       ref:
         description: "Branch, tag ou commit (vazio = branch padrão)"
@@ -60,7 +60,17 @@ jobs:
           NODEPROBE_RPC: ${{ vars.NODEPROBE_RPC }}
         run: |
           mkdir -p resultados
-          args=("$REPO_URL" --saida /resultados/auditoria)
+          monta=()
+          if [[ "$REPO_URL" == https://* ]]; then
+            alvo="$REPO_URL"
+          else
+            # Pasta versionada neste branch (código recebido em .zip, por exemplo).
+            [[ "$REPO_URL" =~ ^[A-Za-z0-9_./-]+$ && "$REPO_URL" != *..* && -d "$REPO_URL" ]] \
+              || { echo "Pasta inválida: $REPO_URL"; exit 1; }
+            alvo=/alvo
+            monta=(-v "$PWD/$REPO_URL:/alvo")
+          fi
+          args=("$alvo" --saida /resultados/auditoria)
           [ -n "$REF" ] && args+=(--ref "$REF")
           [ -n "$ETAPAS" ] && args+=(--etapas "$ETAPAS")
           docker run --rm \
@@ -68,7 +78,7 @@ jobs:
             -e GITHUB_TOKEN="$AUDIT_GITHUB_TOKEN" -e MEDUSA_TIMEOUT \
             -e QUORUM_PAYLOADS -e QUORUM_PROTOCOLO -e QUORUM_REDE -e DAO_ID \
             -e NODEPROBE_WEB -e NODEPROBE_RPC \
-            -v "$PWD/resultados:/resultados" auditoria-web3:ci "${args[@]}"
+            -v "$PWD/resultados:/resultados" "${monta[@]}" auditoria-web3:ci "${args[@]}"
 
       - name: Resumo
         if: always()
