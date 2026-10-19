@@ -125,6 +125,11 @@ lista zktls 'tlsn|TLSNotary|tlsnotary|@reclaimprotocol|reclaim-sdk|attestor-core
     'https?://[A-Za-z0-9._~:/?#@!$&+,;=%-]*(rpc|infura|alchemy|quiknode|ankr|graphql|subgraph)[A-Za-z0-9._~:/?#@!$&+,;=%-]*' . 2>/dev/null \
     | sort -u) > "$INV_DIR/urls_rpc.txt"
 
+# Escopo para o relatório profissional: sha256, linhas e caminho de cada arquivo auditável.
+(cd "$REPO_DIR" && cat "$INV_DIR/solidity.txt" "$INV_DIR/circom.txt" | while read -r f; do
+  [ -f "$f" ] && printf '%s\t%s\t%s\n' "$(sha256sum "$f" | cut -c1-16)" "$(wc -l < "$f" | tr -d ' ')" "$f"
+done) > "$INV_DIR/escopo.tsv"
+
 TIPO="nenhum"
 [ -f "$REPO_DIR/foundry.toml" ] && TIPO="foundry"
 ls "$REPO_DIR"/hardhat.config.* >/dev/null 2>&1 && TIPO="${TIPO/nenhum/hardhat}"
@@ -154,5 +159,7 @@ done
 
 # ---------------------------------------------------------------- relatório
 python3 "$PIPELINE_DIR/relatorio.py" "$SAIDA"
+python3 "$PIPELINE_DIR/relatorio_profissional.py" "$SAIDA" ${TRIAGEM:+--triagem "$TRIAGEM"}
 echo
-echo "Relatório: $SAIDA/RELATORIO.md"
+echo "Relatório técnico:       $SAIDA/RELATORIO.md"
+echo "Rascunho do relatório:   $SAIDA/AUDITORIA.md (complete a triagem e gere de novo)"

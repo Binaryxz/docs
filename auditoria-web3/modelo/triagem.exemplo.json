@@ -1,0 +1,49 @@
+{
+  "cliente": "Nome do Cliente Ltda.",
+  "projeto": "Protocolo Exemplo",
+  "versao": "1.0",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "datas": { "inicio": "2026-10-01", "fim": "2026-10-15" },
+  "auditores": ["Auditor 1", "Auditor 2"],
+  "resumo": "Em dois parágrafos: o que o protocolo faz, o que foi auditado, quantos achados por severidade e a conclusão geral (pronto ou não para produção, e sob quais condições).",
+  "avaliacao": {
+    "codigo": { "nota": "Boa", "comentario": "Código legível, padrões consistentes." },
+    "documentacao": { "nota": "Excelente", "comentario": "NatSpec completo e documentos de arquitetura." },
+    "testes": { "nota": "Moderada", "comentario": "Sem testes de invariantes para o cofre." },
+    "acesso": { "nota": "Boa", "comentario": "Timelock em mudanças que aumentam risco." },
+    "descentralizacao": { "nota": "Fraca", "comentario": "Um único governador controla parâmetros críticos." },
+    "aritmetica": { "nota": "Boa", "comentario": "Arredondamentos a favor do protocolo." }
+  },
+  "fora_do_escopo": [
+    "Contratos de terceiros (OpenZeppelin, Uniswap) usados como dependência",
+    "Código off-chain (TypeScript) e infraestrutura"
+  ],
+  "riscos_centralizacao": [
+    "O governador pode trocar o oráculo após o prazo de governança; usuários devem acompanhar os agendamentos.",
+    "A mesa de arbitragem decide disputas off-chain."
+  ],
+  "achados": [
+    {
+      "titulo": "Preço das cotas manipulável pelo livro spot",
+      "impacto": "Alto",
+      "probabilidade": "Média",
+      "status": "Pendente",
+      "local": ["contracts/Vault.sol:249", "contracts/Strategy.sol:229"],
+      "ferramenta": "revisão manual",
+      "descricao": "O que está errado, com referência ao código.",
+      "impacto_texto": "O que um atacante ganha ou quem perde, e quanto.",
+      "exploracao": "1. Passo um.\n2. Passo dois.\n3. Resultado.",
+      "recomendacao": "Mudança concreta, de preferência com trecho de código.",
+      "resposta_cliente": "",
+      "revisao_correcao": ""
+    },
+    {
+      "titulo": "Comentário afirma conformidade com RFC que não existe",
+      "severidade": "Informativa",
+      "status": "Reconhecido",
+      "local": "contracts/Verifier.sol:83",
+      "descricao": "…",
+      "recomendacao": "…"
+    }
+  ]
+}

@@ -70,6 +70,28 @@ resultados/<repo>-<data>/
 └── etapas/<etapa>/       ← saída bruta de cada ferramenta + status.json
 ```
 
+## Relatório para o cliente (`AUDITORIA.md`)
+
+Toda execução também gera `AUDITORIA.md`, um rascunho no formato das grandes empresas de
+auditoria (Trail of Bits, OpenZeppelin, Spearbit, Zellic): capa, aviso legal, resumo executivo,
+escopo com hash de cada arquivo, metodologia, matriz impacto × probabilidade, achados com IDs
+(`H-01`, `M-02`...), riscos de centralização e apêndices.
+
+O pipeline preenche sozinho o escopo, a metodologia, a cobertura por ferramenta e os sinais
+brutos (Apêndice A). **Os achados confirmados vêm da triagem**, que é trabalho do auditor:
+
+1. Copie `modelo/triagem.exemplo.json`, registre cada achado confirmado (impacto, probabilidade,
+   cenário de exploração, recomendação) e os dados do cliente.
+2. Gere de novo:
+   ```bash
+   python3 relatorio_profissional.py resultados/<repo>-<data> --triagem triagem.json
+   ```
+3. Depois da correção pelo cliente, preencha `status`, `resposta_cliente` e `revisao_correcao`,
+   suba a `versao` e gere de novo.
+
+A severidade é calculada pela matriz quando você informa `impacto` e `probabilidade`, ou pode ser
+fixada com `severidade`.
+
 ## Limitações, sem enfeite
 
 - **Achados são brutos.** Ferramentas automáticas geram falsos positivos; tudo
