@@ -40,17 +40,23 @@ RUN python3 -m venv /opt/venv \
          certora-quorum nodeprobe \
     && solc-select install latest && solc-select use latest
 
+# Ferramentas opcionais: se a instalação de uma falhar, o build continua e a
+# etapa correspondente é pulada (aparece como "não instalado" no relatório).
+
 # Picus (Veridise)
-RUN git clone --depth 1 https://github.com/Veridise/Picus.git /opt/Picus \
-    && cd /opt/Picus && raco pkg install --auto --batch
+RUN (git clone --depth 1 https://github.com/Veridise/Picus.git /opt/Picus \
+      && cd /opt/Picus && raco pkg install --auto --batch) \
+    || { echo "AVISO: Picus não instalado"; rm -rf /opt/Picus; }
 
 # SolidityGuard
-RUN git clone --depth 1 https://github.com/alt-research2/SolidityGuard.git /opt/SolidityGuard \
-    && pip install --no-cache-dir -e /opt/SolidityGuard/apps/cli
+RUN (git clone --depth 1 https://github.com/alt-research2/SolidityGuard.git /opt/SolidityGuard \
+      && pip install --no-cache-dir -e /opt/SolidityGuard/apps/cli) \
+    || { echo "AVISO: SolidityGuard não instalado"; rm -rf /opt/SolidityGuard; }
 
 # SymGPT
-RUN git clone --depth 1 https://github.com/symbolic-gpt/symgpt.git /opt/symgpt \
-    && pip install --no-cache-dir -e /opt/symgpt
+RUN (git clone --depth 1 https://github.com/symbolic-gpt/symgpt.git /opt/symgpt \
+      && pip install --no-cache-dir -e /opt/symgpt) \
+    || { echo "AVISO: SymGPT não instalado"; rm -rf /opt/symgpt; }
 
 # Claude Code (revisões por LLM) + BridgeGuard MCP
 RUN npm install -g @anthropic-ai/claude-code "bridgeguard-mcp@${BRIDGEGUARD_VERSION}" \
