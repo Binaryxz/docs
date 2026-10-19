@@ -244,3 +244,11 @@ def test_checknumber_fluxo(tmp_path):
     assert saida.read_text().splitlines() == ["telefone_e164,tem_whatsapp", "+5511988887777,sim", "+5521987654321,nao"]
     assert not os.path.exists(str(saida) + ".task_id")
     assert cliente.s.post.call_args_list[0].kwargs["data"] == {"task_type": "ws"}
+
+
+def test_socio_do_email():
+    import sinais_dono as sd
+    socios = ["ANA MARIA SOUZA", "CRISTIANE CADE DE OLIVEIRA"]
+    assert sd.socio_do_email("CRISTIANECADE@HOTMAIL.COM", socios) == "CRISTIANE CADE DE OLIVEIRA"
+    assert sd.socio_do_email("contato@escritorio.com.br", socios) == ""
+    assert sd.socio_do_email("silva.adv@gmail.com", ["JOAO DA SILVA"]) == ""  # sobrenome comum não conta

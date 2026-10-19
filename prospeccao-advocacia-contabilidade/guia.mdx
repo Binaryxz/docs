@@ -25,6 +25,7 @@ Scripts em [`/prospeccao-advocacia-contabilidade/scripts`](https://github.com/bi
 | 2 e 3. Filtro + decisor | `filtrar_cnpjs_segmento.py --segmento advocacia\|contabil` |
 | 4. Telefone | `preparar_telefones.py` (reaproveita o `validar_telefone.py` da fintech sem mudança) |
 | 5. WhatsApp | `checar_whatsapp_checknumber.py` |
+| 5.5 Contato do dono | `sinais_dono.py` |
 | 6. Saídas | `gerar_saidas.py` |
 
 Dependências: Python 3.10+ e `prospeccao-fintech/scripts/requirements.txt` (`pandas`, `phonenumbers`, `requests`).
@@ -172,6 +173,26 @@ O que acontece por trás:
 <Warning>
   **Cache da API (`cached_count`):** um número já checado antes, por você ou por qualquer outro cliente, volta do cache. Reconsultar um `nao` antigo esperando que ele vire `sim` **não funciona**: o resultado volta idêntico.
 </Warning>
+
+## Etapa 5.5 — Contato do dono (sem serviço de terceiros)
+
+O telefone da Receita é o telefone **da empresa**: pode ser do dono, da recepção ou do contador. `sinais_dono.py` usa só os dados abertos para priorizar os contatos com mais chance de ser do dono:
+
+- `uma_pessoa`: empresário individual (natureza 2135) ou sócio único. Nesses casos o celular cadastrado é quase sempre do dono.
+- `socio_do_email`: o nome (ou um sobrenome pouco comum) de um sócio aparece antes do @ do e-mail. Exemplo: `cristianecade@…` → CRISTIANE CADE. Quando isso acontece, esse sócio vira o `nome_decisor`, e é o primeiro nome dele que vai pra mensagem.
+- `sinal_dono` = soma dos dois sinais (0–2). Com `--minimo 1`, ficam só os contatos com algum sinal, ordenados do 2 pro 1.
+
+```bash
+cd prospeccao-advocacia-contabilidade/scripts
+python sinais_dono.py leads_advocacia_wa.csv leads_advocacia_dono.csv \
+  --socios "dados_rf/2026-09-14/Socios*.zip" --minimo 1
+```
+
+Rode **antes** da checagem de WhatsApp para pagar só pelos números com sinal. Isso estima a probabilidade, mas não confirma a titularidade.
+
+Nas listas de 2026-10-19 (mil contatos por segmento, todos com sinal):
+- **Advocacia:** 951 têm o e-mail de um sócio identificado, 338 são de uma pessoa só e 289 têm os dois sinais.
+- **Contábil:** 912 são de uma pessoa só, 602 têm o e-mail de um sócio e 514 têm os dois.
 
 ## Etapa 6 — Saídas (template de disparo + WATI)
 
