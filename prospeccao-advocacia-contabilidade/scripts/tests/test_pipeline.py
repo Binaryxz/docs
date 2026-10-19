@@ -123,6 +123,27 @@ def test_advocacia(base):
     assert leads["10000001"]["nome_municipio"] == "SAO PAULO"
     # ordenação por relevância: keyword + sinal primeiro
     assert list(leads)[0] == "10000002"
+    assert leads["10000002"]["cnae_principal_do_segmento"] == "1"
+
+
+def test_cnae_principal_marcado(base):
+    leads, _ = rodar_filtro(base, "contabil")
+    # 20000002 tem 6920602 como principal (peso 2) -> conta como do segmento
+    assert all(l["cnae_principal_do_segmento"] == "1" for l in leads.values())
+
+
+def test_limpa_email():
+    import gerar_saidas as g
+    assert g.limpa_email("MeloConsultor@Hotmail.com'") == "meloconsultor@hotmail.com"
+    assert g.limpa_email("sem email") == ""
+
+
+def test_primeiro_nome():
+    import gerar_saidas as g
+    assert g.primeiro_nome({"nome_decisor": "MARIA DA SILVA", "documento_decisor": "***123456**"}) == "Maria"
+    assert g.primeiro_nome({"natureza_juridica": "2135", "razao_social": "GUSTAVO F CRUZ ASSESSORIA", "nome_fantasia": "GT"}) == "Gustavo"
+    assert g.primeiro_nome({"natureza_juridica": "2135", "razao_social": "J AVELANE DA SILVA", "nome_fantasia": "CONSULT"}) == ""
+    assert g.primeiro_nome({"natureza_juridica": "2240", "razao_social": "ALFA LTDA", "nome_fantasia": "ALFA"}) == ""
 
 
 def test_advocacia_exigir_e_incluir_keyword(base):

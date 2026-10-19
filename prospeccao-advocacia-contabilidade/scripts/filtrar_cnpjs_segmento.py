@@ -134,7 +134,7 @@ CAMPOS_SOCIOS = [
 CAMPOS_MUNICIPIOS = ["codigo", "descricao"]
 
 COLUNAS_SAIDA = [
-    "segmento", "cnpj", "razao_social", "nome_fantasia", "relevancia",
+    "segmento", "cnpj", "razao_social", "nome_fantasia", "cnae_principal_do_segmento", "relevancia",
     "keywords_positivas", "cnaes_sinal_encontrados", "percentual_match_cnae",
     "qtd_cnaes_alvo_encontrados", "motivo_match", "cnae_fiscal_principal",
     "cnae_fiscal_secundaria", "data_inicio_atividade", "capital_social",
@@ -374,6 +374,7 @@ def main() -> None:
 
     seg = SEGMENTOS[args.segmento]
     positivas = compila_termos(seg["positivas"])
+    principais = {c for c, peso in seg["cnaes_alvo"].items() if peso == 2}
     negativas = compila_termos(seg["negativas"])
 
     caminhos_estab = expandir(args.estabelecimentos)
@@ -428,6 +429,10 @@ def main() -> None:
             continue
         dados["keywords_positivas"] = "|".join(poss)
         sinais = [s for s in dados["cnaes_sinal_encontrados"].split("|") if s]
+        # O CNAE do segmento como PRINCIPAL vem antes de tudo na ordenação: sem
+        # isso, empresa de consultoria/TI com 6911701/6920601 só como
+        # secundário subia pro topo por somar CNAEs-sinal (visto na base real).
+        dados["cnae_principal_do_segmento"] = "1" if dados.get("cnae_fiscal_principal", "").strip() in principais else "0"
         # 0..: +2 se tem keyword positiva, +1 por CNAE-sinal, +1 se veio por CNAE
         dados["relevancia"] = (2 if poss else 0) + len(sinais) + (1 if dados["motivo_match"] == "cnae" else 0)
         filtrados[cnpj_basico] = dados
@@ -458,7 +463,7 @@ def main() -> None:
     municipios = carregar_municipios(args.municipios)
 
     print(f"[4/4] gravando {args.saida}...", file=sys.stderr)
-    ordenados = sorted(leads.items(), key=lambda kv: (-kv[1]["relevancia"], -kv[1]["percentual_match_cnae"], kv[0]))
+    ordenados = sorted(leads.items(), key=lambda kv: (kv[1]["cnae_principal_do_segmento"] != "1", -kv[1]["relevancia"], -kv[1]["percentual_match_cnae"], kv[0]))
     with open(args.saida, "w", newline="", encoding="utf-8") as f_out:
         writer = csv.DictWriter(f_out, fieldnames=COLUNAS_SAIDA)
         writer.writeheader()
@@ -471,6 +476,7 @@ def main() -> None:
                     "cnpj": cnpj_basico + estab.get("cnpj_ordem", "") + estab.get("cnpj_dv", ""),
                     "razao_social": emp["razao_social"],
                     "nome_fantasia": estab.get("nome_fantasia", ""),
+                    "cnae_principal_do_segmento": estab["cnae_principal_do_segmento"],
                     "relevancia": estab["relevancia"],
                     "keywords_positivas": estab["keywords_positivas"],
                     "cnaes_sinal_encontrados": estab["cnaes_sinal_encontrados"],

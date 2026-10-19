@@ -102,6 +102,8 @@ As listas ficam editáveis em `SEGMENTOS`, no topo do script.
 
 `relevancia` = +2 se tem keyword positiva, +1 por CNAE-sinal e +1 se entrou por CNAE.
 
+A ordenação põe **primeiro quem tem o CNAE do segmento como principal** (coluna `cnae_principal_do_segmento`) e só depois aplica a relevância. Sem isso, consultorias e empresas de TI que têm 6911701 ou 6920601 só como CNAE secundário subiam pro topo somando CNAEs-sinal. Na primeira lista de teste, isso afetou 524 dos 1.600 leads da contábil.
+
 <Note>
   **Por que as keywords positivas não decidem a entrada por padrão?** Termos como EMPRESARIAL, CONTRATOS, AUDITORIA e CONSULTIVA aparecem em dezenas de milhares de empresas que não são escritórios ("XYZ Empresarial Ltda", consultorias de TI...). Sem o CNAE como portão, a lista vira ruído. Isso foi medido na base real: veja [Resultados da primeira rodada](#resultados-da-primeira-rodada). Duas flags mudam esse comportamento:
   - `--exigir-keyword`: mantém só quem tem CNAE **e** keyword positiva. A lista fica menor e mais "empresarial".

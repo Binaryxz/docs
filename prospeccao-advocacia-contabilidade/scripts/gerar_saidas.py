@@ -19,8 +19,9 @@ dia só empilha falha. O que sobrar vai pra --resto, pra rodar no dia seguinte.
 
 Mapeamento:
   nome          <- razao_social
-  primeiro_nome <- primeiro nome do decisor (capitalizado); sem decisor ->
-                   primeira palavra do nome fantasia / razão social
+  primeiro_nome <- primeiro nome do decisor (capitalizado); sem decisor e
+                   empresário individual -> 1a palavra da razão social se
+                   for nome (>= 3 letras); senão vazio
   telefone      <- telefone_e164 sem "+" (55 + DDD + número)
   email         <- correio_eletronico (Receita)
   regiao        <- nome_municipio/UF (ou só UF)
@@ -60,8 +61,25 @@ def primeiro_nome(lead: dict) -> str:
         for palavra in nome_decisor.split():
             if palavra.lower() not in NAO_NOME:
                 return capitaliza(palavra)
-    base = (lead.get("nome_fantasia") or "").strip() or (lead.get("razao_social") or "").strip()
-    return capitaliza(base.split()[0]) if base.split() else ""
+    # Empresário individual (natureza 2135) não tem sócio: a razão social é o
+    # nome do dono. Só usa se a 1a palavra for nome mesmo — "J", "W", "R."
+    # viram vazio em vez de um primeiro nome errado. O nome fantasia nunca é
+    # usado ("Consult", "Alpha"... saíam como primeiro nome).
+    if (lead.get("natureza_juridica") or "").strip() == "2135":
+        palavras = (lead.get("razao_social") or "").split()
+        if palavras and len(palavras[0]) >= 3 and palavras[0].isalpha():
+            return capitaliza(palavras[0])
+    return ""
+
+
+RX_EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+")
+
+
+def limpa_email(bruto: str) -> str:
+    """A Receita traz e-mail com lixo (aspas, espaço, ponto no fim...). Fica o
+    primeiro trecho com formato de e-mail; sem isso, vazio."""
+    m = RX_EMAIL.search((bruto or "").strip().lower())
+    return m.group(0).rstrip(".-") if m else ""
 
 
 def regiao(lead: dict) -> str:
@@ -120,7 +138,7 @@ def main() -> None:
                     "nome": nome,
                     "primeiro_nome": pn,
                     "telefone": telefone,
-                    "email": (lead.get("correio_eletronico") or "").strip().lower(),
+                    "email": limpa_email(lead.get("correio_eletronico", "")),
                     "regiao": regiao(lead),
                     "valor": "",
                 }
