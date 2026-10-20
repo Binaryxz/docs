@@ -48,7 +48,8 @@ find "$REPO" -name foundry.toml -not -path '*/node_modules/*' -not -path '*/lib/
       [ -e "$dir/lib/$nome" ] && continue
       alvo=""
       for nm in "$dir/node_modules" "$REPO/node_modules"; do
-        for c in "$nm/$nome" "$nm"/@*/"$nome" "$nm"/@*/"$nome.sol"; do
+        # O pacote Solidity (nome.sol) vem antes do homônimo JS: @zk-kit/lean-imt.sol, não @zk-kit/lean-imt.
+        for c in "$nm/$nome.sol" "$nm"/@*/"$nome.sol" "$nm/$nome" "$nm"/@*/"$nome"; do
           [ -d "$c" ] && { alvo="$c"; break 2; }
         done
       done

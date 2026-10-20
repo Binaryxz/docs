@@ -61,9 +61,22 @@ if tem forge; then
   while read -r r; do
     nome=$(echo "$r" | tr '/.' '__')
     log "forge invariant em $r"
+    log_f="$SDIR/forge-invariant-$nome.log"
     (cd "$r" && timeout "${FORGE_TIMEOUT:-1200}" forge test --match-test 'invariant' \
-        --fuzz-runs "${FORGE_RUNS:-256}" -vv) > "$SDIR/forge-invariant-$nome.log" 2>&1
+        --fuzz-runs "${FORGE_RUNS:-256}" -vv) > "$log_f" 2>&1
     rc=$?
+    # Um teste do projeto que não compila derruba a suíte inteira: registra quais e
+    # roda de novo pulando só esses arquivos.
+    quebrados=$(grep -oE -- '--> [^:]+\.t\.sol' "$log_f" | awk '{print $2}' | sort -u)
+    if [ -n "$quebrados" ] && ! grep -qE '^\[(PASS|FAIL)' "$log_f"; then
+      echo "$quebrados" > "$SDIR/testes-que-nao-compilam-$nome.txt"
+      skip=(); for q in $quebrados; do skip+=(--skip "$q"); done
+      log "forge em $r: pulando testes que não compilam: $(echo $quebrados | tr '\n' ' ')"
+      (cd "$r" && timeout "${FORGE_TIMEOUT:-1200}" forge test --match-test 'invariant' \
+          --fuzz-runs "${FORGE_RUNS:-256}" -vv "${skip[@]}") > "$log_f" 2>&1
+      rc=$?
+      resumo+="forge $r: $(echo "$quebrados" | wc -l) teste(s) do projeto não compilam (pulados); "
+    fi
     n=$(grep -cE '^\[FAIL' "$SDIR/forge-invariant-$nome.log") || true
     ok=$(grep -cE '^\[PASS' "$SDIR/forge-invariant-$nome.log") || true
     if [ "${ok:-0}" -eq 0 ] && [ "${n:-0}" -eq 0 ]; then
