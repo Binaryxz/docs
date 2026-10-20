@@ -43,7 +43,7 @@ RUN curl -fsSL -o /usr/local/bin/circom \
 RUN python3 -m venv /opt/venv \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "miesc[full]" slither-analyzer crytic-compile solc-select \
-         certora-quorum nodeprobe \
+         certora-quorum nodeprobe web3 \
     && solc-select install latest && solc-select use latest
 
 # Ferramentas opcionais: se a instalação de uma falhar, o build continua e a

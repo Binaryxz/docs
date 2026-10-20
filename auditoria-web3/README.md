@@ -59,6 +59,7 @@ quando ela se aplica (ex.: Picus só roda se houver circuitos Circom).
 | `governanca` | [Anticapture](https://github.com/blockful/anticapture) | Governor/Timelock/ERC20Votes | `ANTHROPIC_API_KEY` (+ `ANTICAPTURE_MCP_API_KEY` para dados on-chain) |
 | `quorum` | [Quorum (Certora)](https://github.com/Certora/Quorum) | `QUORUM_PAYLOADS` definido | `ETHSCAN_API_KEY` |
 | `nodeprobe` | [Nodeprobe](https://github.com/ehsanhajian/nodeprobe) | `NODEPROBE_WEB`/`_RPC`/`_CONTRATOS` definidos | — |
+| `implantacao` | leitura on-chain (web3.py) | `ONCHAIN_ENDERECOS` e `ONCHAIN_RPC` definidos | — |
 
 ## Resultado
 

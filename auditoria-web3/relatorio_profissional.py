@@ -156,6 +156,9 @@ def gerar(saida: Path, triagem: dict) -> str:
           "", "Lista completa com hash no [Apêndice C](#apêndice-c--arquivos-no-escopo).", "",
           "**Fora do escopo:**", ""]
     L += [f"- {x}" for x in t.get("fora_do_escopo", [])] or [PENDENTE]
+    # Seções livres da triagem (ex.: verificação dos contratos implantados), dentro do escopo.
+    for s in t.get("secoes_extras", []):
+        L += ["", f"### {s['titulo']}", "", s.get("markdown", "")]
 
     L += ["", "## 4. Metodologia", "",
           "A auditoria combinou análise automatizada e revisão manual linha a linha:", "",
