@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       repo_url:
-        description: "Repositório a auditar (https://github.com/org/repo) ou pasta deste branch (ex: alvo)"
+        description: "Repositório a auditar (https://github.com/org/repo) , pasta ou .zip deste branch (ex: Mova-main.zip)"
         required: true
       ref:
         description: "Branch, tag ou commit (vazio = branch padrão)"
@@ -63,6 +63,16 @@ jobs:
           monta=()
           if [[ "$REPO_URL" == https://* ]]; then
             alvo="$REPO_URL"
+          elif [[ "$REPO_URL" == *.zip ]]; then
+            # .zip versionado neste branch: extraído fora do checkout e montado no container.
+            [[ "$REPO_URL" =~ ^[A-Za-z0-9_./-]+$ && "$REPO_URL" != *..* && -f "$REPO_URL" ]] \
+              || { echo "Zip inválido: $REPO_URL"; exit 1; }
+            d="$RUNNER_TEMP/alvo"
+            mkdir -p "$d" && unzip -q "$REPO_URL" -d "$d"
+            # Um zip do GitHub traz uma única pasta raiz (ex.: Mova-main/): audita o conteúdo dela.
+            if [ "$(ls -A "$d" | wc -l)" -eq 1 ] && [ -d "$d/$(ls -A "$d")" ]; then d="$d/$(ls -A "$d")"; fi
+            alvo=/alvo
+            monta=(-v "$d:/alvo")
           else
             # Pasta versionada neste branch (código recebido em .zip, por exemplo).
             [[ "$REPO_URL" =~ ^[A-Za-z0-9_./-]+$ && "$REPO_URL" != *..* && -d "$REPO_URL" ]] \
