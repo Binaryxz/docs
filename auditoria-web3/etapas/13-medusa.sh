@@ -46,6 +46,7 @@ if tem medusa; then
       tmpd=$(mktemp -d); tmpcfg="$tmpd/medusa.json"
       if (cd "$tmpd" && medusa init --out medusa.json) >/dev/null 2>&1 \
          && jq --arg alvo "$REPO_DIR/$r" '.compilation.platformConfig.target = $alvo
+              | .compilation.platformConfig.args = ((.compilation.platformConfig.args // []) + ["--foundry-compile-all"])
               | .fuzzing.testing.assertionTesting.enabled = true
               | .fuzzing.testing.propertyTesting.enabled = true
               | .fuzzing.testing.propertyTesting.testPrefixes = ["property_", "echidna_"]
