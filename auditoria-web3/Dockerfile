@@ -8,6 +8,7 @@ ARG GO_VERSION=1.24.4
 ARG CIRCOM_VERSION=v2.2.2
 ARG MEDUSA_VERSION=latest
 ARG BRIDGEGUARD_VERSION=0.1.1
+ARG NODE_VERSION=22.11.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/venv/bin:/usr/local/go/bin:/root/go/bin:/root/.foundry/bin:/opt/Picus:$PATH \
@@ -17,9 +18,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git jq curl ca-certificates build-essential unzip \
-      python3 python3-venv python3-dev \
-      nodejs npm racket z3 \
+      python3 python3-venv python3-dev xz-utils \
+      racket z3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Node 22 oficial: projetos atuais exigem Node >= 20, e o do Ubuntu 24.04 é o 18.
+RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+      | tar -xJ -C /usr/local --strip-components=1 \
+    && node --version && npm --version
 
 # Go + Medusa (fuzzer)
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz \
@@ -45,7 +51,7 @@ RUN python3 -m venv /opt/venv \
 
 # Picus (Veridise)
 RUN (git clone --depth 1 https://github.com/Veridise/Picus.git /opt/Picus \
-      && cd /opt/Picus && raco pkg install --auto --batch) \
+      && cd /opt/Picus && raco pkg install --auto --batch --no-docs) \
     || { echo "AVISO: Picus não instalado"; rm -rf /opt/Picus; }
 
 # SolidityGuard

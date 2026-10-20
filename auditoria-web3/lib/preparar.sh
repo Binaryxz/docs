@@ -20,11 +20,12 @@ fi
 # 1. npm na raiz (workspaces instalam os pacotes internos também).
 if [ -f "$REPO/package.json" ] && [ ! -d "$REPO/node_modules" ] && command -v npm >/dev/null; then
   echo "-- npm (--ignore-scripts)"
-  (cd "$REPO" && if [ -f package-lock.json ]; then
-      timeout "${NPM_TIMEOUT:-900}" npm ci --ignore-scripts --no-audit --no-fund
-    else
-      timeout "${NPM_TIMEOUT:-900}" npm install --ignore-scripts --no-audit --no-fund
-    fi) || echo "AVISO: instalação npm falhou"
+  (cd "$REPO" && {
+      # npm ci exige lock em sincronia com o package.json; se não estiver, registra e instala mesmo assim.
+      { [ -f package-lock.json ] && timeout "${NPM_TIMEOUT:-900}" npm ci --ignore-scripts --no-audit --no-fund; } \
+        || { [ -f package-lock.json ] && echo "AVISO: npm ci recusou (package-lock.json fora de sincronia?); usando npm install"; \
+             timeout "${NPM_TIMEOUT:-900}" npm install --ignore-scripts --no-audit --no-fund; }
+    }) || echo "AVISO: instalação npm falhou"
 fi
 
 # 2. Submódulos declarados (clone raso; um zip não traz o conteúdo deles).
