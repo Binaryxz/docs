@@ -99,9 +99,8 @@ fixada com `severidade`.
   precisa de triagem humana. Isto **não substitui** uma auditoria manual.
 - **Medusa precisa de invariantes.** Sem funções `property_*`/`invariant_*`
   (ou `MEDUSA_ALVOS`), a etapa é pulada: fuzzing sem propriedade não prova nada.
-- **Circheck:** o repositório `zksecurity/circheck` indicado não existe
-  publicamente. A etapa usa `circom --inspect`, que detecta sinais sub-restritos,
-  e roda `circheck` só se você tiver o binário no `PATH`.
+- **Circheck:** instalado de `pip install circheck` ([dangduongminhnhat/Circheck](https://github.com/dangduongminhnhat/Circheck)); se a instalação falhar, a etapa roda só o `circom --inspect`.
+- **Circuitos sem `component main` utilizável:** passe `CIRCOM_MAINS` (JSON no formato do `circuits.json`, com `file` relativo à raiz do repositório) para gerar os `main` que o projeto não declara ou declara errado.
 - **privacy-protocol-auditor** é uma skill de agente, não um CLI. A etapa aplica
   a mesma checklist via Claude Code; se você baixar o `SKILL.md` original,
   aponte `PRIVACY_SKILL_PATH` para ele, e o texto entra no prompt.

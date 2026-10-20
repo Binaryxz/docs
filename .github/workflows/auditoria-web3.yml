@@ -27,6 +27,10 @@ on:
         description: "RPC da rede desses contratos (ex: https://ethereum-sepolia-rpc.publicnode.com)"
         required: false
         default: ""
+      circom_mains:
+        description: "Componentes main extras dos circuitos (JSON no formato do circuits.json, file relativo à raiz)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -57,6 +61,7 @@ jobs:
           MEDUSA_TIMEOUT: ${{ inputs.medusa_timeout }}
           ONCHAIN_ENDERECOS: ${{ inputs.onchain_enderecos }}
           ONCHAIN_RPC: ${{ inputs.onchain_rpc }}
+          CIRCOM_MAINS: ${{ inputs.circom_mains }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ETHSCAN_API_KEY: ${{ secrets.ETHSCAN_API_KEY }}
@@ -95,7 +100,7 @@ jobs:
           [ -n "$ETAPAS" ] && args+=(--etapas "$ETAPAS")
           docker run --rm \
             -e ANTHROPIC_API_KEY -e OPENAI_API_KEY -e ETHSCAN_API_KEY -e ANTICAPTURE_MCP_API_KEY \
-            -e GITHUB_TOKEN="$AUDIT_GITHUB_TOKEN" -e MEDUSA_TIMEOUT -e ONCHAIN_ENDERECOS -e ONCHAIN_RPC \
+            -e GITHUB_TOKEN="$AUDIT_GITHUB_TOKEN" -e MEDUSA_TIMEOUT -e ONCHAIN_ENDERECOS -e ONCHAIN_RPC -e CIRCOM_MAINS \
             -e QUORUM_PAYLOADS -e QUORUM_PROTOCOLO -e QUORUM_REDE -e DAO_ID \
             -e NODEPROBE_WEB -e NODEPROBE_RPC \
             -v "$PWD/resultados:/resultados" "${monta[@]}" auditoria-web3:ci "${args[@]}"

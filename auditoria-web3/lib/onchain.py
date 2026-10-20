@@ -67,6 +67,7 @@ def main(rpc, saida, alvos):
         code = w3.eth.get_code(a, block_identifier=bloco)
         c = {"endereco": a, "rotulo": rotulo, "bytes": len(code),
              "runtime_sha256": hashlib.sha256(code).hexdigest() if code else None,
+             "code": "0x" + code.hex() if code else None,
              "eth": str(w3.eth.get_balance(a, block_identifier=bloco)), "getters": {}, "saldos": {}}
         if code:
             for nome, slot in (("impl_eip1967", SLOT_IMPL), ("admin_eip1967", SLOT_ADMIN)):

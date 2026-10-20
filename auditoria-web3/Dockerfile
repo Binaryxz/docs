@@ -59,6 +59,9 @@ RUN (git clone --depth 1 https://github.com/alt-research2/SolidityGuard.git /opt
       && pip install --no-cache-dir -e /opt/SolidityGuard/apps/cli) \
     || { echo "AVISO: SolidityGuard não instalado"; rm -rf /opt/SolidityGuard; }
 
+# Circheck (análise estática de circuitos Circom, dangduongminhnhat/Circheck)
+RUN pip install --no-cache-dir circheck || echo "AVISO: Circheck não instalado"
+
 # SymGPT
 RUN (git clone --depth 1 https://github.com/symbolic-gpt/symgpt.git /opt/symgpt \
       && pip install --no-cache-dir -e /opt/symgpt) \
