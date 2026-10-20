@@ -54,11 +54,12 @@ if tem medusa; then
         mv "$tmpcfg.novo" "$tmpcfg"; cfg=(--config "$tmpcfg")
       fi
     fi
-    (cd "$r" && timeout $(( ${MEDUSA_TIMEOUT:-900} + 300 )) medusa fuzz "${cfg[@]}" \
+    # Sem dynamic test linking: o forge gera fontes em foundry-pp/ que o crytic-compile não acha.
+    (cd "$r" && FOUNDRY_DYNAMIC_TEST_LINKING=false timeout $(( ${MEDUSA_TIMEOUT:-900} + 300 )) medusa fuzz "${cfg[@]}" \
         --target-contracts "${alvos[$r]}" --timeout "${MEDUSA_TIMEOUT:-900}" \
         --workers "${MEDUSA_WORKERS:-$(nproc)}") > "$SDIR/medusa-$nome.log" 2>&1
     n=$(grep -cE '\[FAILED\]' "$SDIR/medusa-$nome.log") || true
-    if grep -qiE 'compilation (failed|error)|CryticCompile:Compilation failed' "$SDIR/medusa-$nome.log"; then
+    if grep -qiE 'compilation (failed|error)|Failed to compile target|CryticCompile:Compilation failed' "$SDIR/medusa-$nome.log"; then
       resumo+="medusa $r: falha de compilação; "
     elif grep -qiE 'Failed to start fuzzer|no assertion, property, optimization' "$SDIR/medusa-$nome.log"; then
       resumo+="medusa $r: não fuzzou ($(grep -oiE 'no assertion[^[:cntrl:]]*|Failed to start fuzzer' "$SDIR/medusa-$nome.log" | tail -1)); "
