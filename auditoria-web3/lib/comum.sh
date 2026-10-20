@@ -48,11 +48,11 @@ revisao_llm() {
   [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "ANTHROPIC_API_KEY não definida"; return 2; }
 
   local args=(-p --output-format text --allowedTools "Read Grep Glob $extras"
-              --disallowedTools "Bash Edit Write NotebookEdit WebFetch WebSearch")
+              --disallowedTools "Bash Edit Write NotebookEdit WebFetch WebSearch Task Agent")
   [ -n "$mcp" ] && args+=(--mcp-config "$mcp" --strict-mcp-config)
   [ -n "${LLM_MODEL:-}" ] && args+=(--model "$LLM_MODEL")
 
-  (cd "$REPO_DIR" && timeout "${LLM_TIMEOUT:-1800}" claude "${args[@]}" < "$prompt") > "$saida" 2> "$saida.log"
+  (cd "$REPO_DIR" && timeout "${LLM_TIMEOUT:-3000}" claude "${args[@]}" < "$prompt") > "$saida" 2> "$saida.log"
 }
 
 # Conta os achados de severidade no relatório LLM (linhas "### [ALTA] ...").

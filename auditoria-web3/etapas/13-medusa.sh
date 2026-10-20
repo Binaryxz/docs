@@ -26,29 +26,41 @@ if tem medusa; then
   if [ -n "${MEDUSA_ALVOS:-}" ]; then
     alvos["${MEDUSA_RAIZ:-.}"]="$MEDUSA_ALVOS"
   else
-    while read -r f; do
-      r=$(raiz_de "$f"); [ -n "$r" ] || continue
-      for c in $(grep -hoE '^\s*contract\s+[A-Za-z0-9_]+' "$f" | awk '{print $2}'); do
-        case ",${alvos[$r]:-}," in *",$c,"*) ;; *) alvos[$r]="${alvos[$r]:+${alvos[$r]},}$c" ;; esac
-      done
-    done < <(grep -rlIE --include='*.sol' "${EXC[@]}" 'function (property_|echidna_)' . 2>/dev/null | sed 's|^\./||')
+    # Harnesses montados por herança (FuzzTest is PropertiesParent is ...): o alvo é o
+    # contrato folha que herda as propriedades, não os pais que as definem.
+    while read -r r; do
+      folhas=$(python3 -I "$PIPELINE_DIR/lib/medusa_alvos.py" "$r")
+      [ -n "$folhas" ] && alvos[$r]="$folhas"
+    done < <(grep -rlIE --include='*.sol' "${EXC[@]}" 'function (property_|echidna_)' . 2>/dev/null \
+              | sed 's|^\./||' | while read -r f; do raiz_de "$f"; done | sort -u)
   fi
   for r in "${!alvos[@]}"; do
-    # Só o contrato "folha" (não herdado por outro do projeto) é o harness: os pais
-    # costumam ser abstratos e o Medusa não os implanta.
-    herdados=$(grep -rhoIE --include='*.sol' "${EXC[@]}" '^\s*(abstract\s+)?contract\s+[A-Za-z0-9_]+\s+is\s+[^{]+' "$r" 2>/dev/null \
-      | sed -E 's/.*\sis\s+//' | tr ',' '\n' | sed -E 's/\(.*//; s/\s//g' | sort -u)
-    folhas=$(echo "${alvos[$r]}" | tr ',' '\n' | grep -vxF -f <(echo "$herdados") | paste -sd, -)
-    [ -n "$folhas" ] && alvos[$r]="$folhas"
     nome=$(echo "$r" | tr '/.' '__')
     log "medusa em $r: ${alvos[$r]}"
-    cfg=(); [ -f "$r/medusa.json" ] && cfg=(--config medusa.json)
+    cfg=()
+    if [ -f "$r/medusa.json" ]; then
+      cfg=(--config medusa.json)
+    else
+      # Sem config do projeto: liga também o modo de asserções, porque harnesses no estilo
+      # property_x(uint256 seed) usam assert/require em vez de retornar bool.
+      tmpd=$(mktemp -d); tmpcfg="$tmpd/medusa.json"
+      if (cd "$tmpd" && medusa init --out medusa.json) >/dev/null 2>&1 \
+         && jq --arg alvo "$REPO_DIR/$r" '.compilation.platformConfig.target = $alvo
+              | .fuzzing.testing.assertionTesting.enabled = true
+              | .fuzzing.testing.propertyTesting.enabled = true
+              | .fuzzing.testing.propertyTesting.testPrefixes = ["property_", "echidna_"]
+              | .fuzzing.codeSizeCheckDisabled = true' "$tmpcfg" > "$tmpcfg.novo"; then
+        mv "$tmpcfg.novo" "$tmpcfg"; cfg=(--config "$tmpcfg")
+      fi
+    fi
     (cd "$r" && timeout $(( ${MEDUSA_TIMEOUT:-900} + 300 )) medusa fuzz "${cfg[@]}" \
         --target-contracts "${alvos[$r]}" --timeout "${MEDUSA_TIMEOUT:-900}" \
         --workers "${MEDUSA_WORKERS:-$(nproc)}") > "$SDIR/medusa-$nome.log" 2>&1
     n=$(grep -cE '\[FAILED\]' "$SDIR/medusa-$nome.log") || true
     if grep -qiE 'compilation (failed|error)|CryticCompile:Compilation failed' "$SDIR/medusa-$nome.log"; then
       resumo+="medusa $r: falha de compilação; "
+    elif grep -qiE 'Failed to start fuzzer|no assertion, property, optimization' "$SDIR/medusa-$nome.log"; then
+      resumo+="medusa $r: não fuzzou ($(grep -oiE 'no assertion[^[:cntrl:]]*|Failed to start fuzzer' "$SDIR/medusa-$nome.log" | tail -1)); "
     else
       rodadas=$((rodadas + 1)); falhas=$((falhas + ${n:-0}))
       resumo+="medusa $r: ${n:-0} propriedade(s) quebrada(s); "
