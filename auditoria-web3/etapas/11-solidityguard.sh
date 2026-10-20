@@ -19,6 +19,11 @@ while read -r raiz; do
   if tem solidityguard; then
     (cd "$REPO_DIR" && timeout "${SG_TIMEOUT:-1800}" solidityguard audit "$raiz") \
       > "$SDIR/auditoria-$nome.txt" 2>&1 || true
+    # Sem JSON do scanner, o total vem do rodapé do CLI ("Score: N/100 | X findings").
+    if [ ! -s "$SDIR/achados-$nome.json" ]; then
+      n=$(grep -oE '[0-9]+ findings' "$SDIR/auditoria-$nome.txt" | tail -1 | grep -oE '^[0-9]+') || true
+      total=$((total + ${n:-0}))
+    fi
   fi
 done < "$INV_DIR/sol_raizes.txt"
 

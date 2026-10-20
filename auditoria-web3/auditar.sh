@@ -89,10 +89,14 @@ fi
 export REPO_DIR
 COMMIT=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "n/d")
 
+# ---------------------------------------------------------------- dependências
+echo "Preparando dependências (npm --ignore-scripts, libs do Foundry) ..."
+bash "$PIPELINE_DIR/lib/preparar.sh" "$REPO_DIR" "$OUT_DIR/_preparo.log"
+
 # ---------------------------------------------------------------- inventário
 echo "Inventariando $REPO_DIR ..."
 EXCL=(--exclude-dir=.git --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=out
-      --exclude-dir=cache --exclude-dir=artifacts --exclude-dir=dist --exclude-dir=build
+      --exclude-dir=cache --exclude-dir=forge-out --exclude-dir=artifacts --exclude-dir=dist --exclude-dir=build
       --exclude-dir=vendor --exclude-dir=target)
 CODIGO=(--include='*.sol' --include='*.vy' --include='*.circom' --include='*.nr'
         --include='*.ts' --include='*.js' --include='*.rs' --include='*.go' --include='*.py')
@@ -103,13 +107,17 @@ lista() { # lista <nome> <regex> [includes...]
 }
 
 (cd "$REPO_DIR" && find . \( -name .git -o -name node_modules -o -name lib -o -name out -o -name cache \
-    -o -name artifacts -o -name test -o -name tests -o -name script -o -name mocks -o -name mock \) -prune \
+    -o -name artifacts -o -name forge-out -o -name test -o -name tests -o -name script -o -name mocks -o -name mock \) -prune \
     -o -type f -name '*.sol' ! -name '*.t.sol' ! -name '*.s.sol' -print | sed 's|^\./||' | sort) > "$INV_DIR/solidity.txt"
 (cd "$REPO_DIR" && find . \( -name .git -o -name node_modules \) -prune -o -type f -name '*.circom' -print \
     | sed 's|^\./||' | sort) > "$INV_DIR/circom.txt"
 : > "$INV_DIR/circom_main.txt"
 while read -r f; do grep -qE '^\s*component\s+main' "$REPO_DIR/$f" && echo "$f"; done \
   < "$INV_DIR/circom.txt" > "$INV_DIR/circom_main.txt"
+# circomkit declara os componentes principais em circuits.json, não nos fontes: gera os
+# arquivos `main` fora do repositório (caminhos absolutos em circom_main.txt).
+python3 "$PIPELINE_DIR/lib/circomkit_mains.py" "$REPO_DIR" "$SAIDA/circom_main" >> "$INV_DIR/circom_main.txt" \
+  2>> "$OUT_DIR/_preparo.log" || true
 # Diretórios raiz dos contratos (src/, contracts/...) para não varrer dependências.
 awk -F/ '{print (NF>1 ? $1 : ".")}' "$INV_DIR/solidity.txt" | sort -u > "$INV_DIR/sol_raizes.txt"
 

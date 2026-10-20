@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Instala o que um repositório precisa para compilar quando chega sem dependências
+# (zip do GitHub, clone sem submódulos): pacotes npm e libs do Foundry em lib/.
+#
+#   preparar.sh <repo_dir> <log>
+#
+# O código auditado não é confiável: npm roda com --ignore-scripts, e nada aqui
+# executa scripts do projeto. Falhas só são registradas; quem precisa compilar
+# relata o erro na própria etapa.
+
+set -uo pipefail
+REPO="$1" LOG="$2"
+exec >>"$LOG" 2>&1
+echo "== preparo de dependências: $(date -u +%FT%TZ)"
+
+if [ "${AUDITAR_SEM_DEPENDENCIAS:-0}" = 1 ]; then
+  echo "AUDITAR_SEM_DEPENDENCIAS=1: nada instalado"; exit 0
+fi
+
+# 1. npm na raiz (workspaces instalam os pacotes internos também).
+if [ -f "$REPO/package.json" ] && [ ! -d "$REPO/node_modules" ] && command -v npm >/dev/null; then
+  echo "-- npm (--ignore-scripts)"
+  (cd "$REPO" && if [ -f package-lock.json ]; then
+      timeout "${NPM_TIMEOUT:-900}" npm ci --ignore-scripts --no-audit --no-fund
+    else
+      timeout "${NPM_TIMEOUT:-900}" npm install --ignore-scripts --no-audit --no-fund
+    fi) || echo "AVISO: instalação npm falhou"
+fi
+
+# 2. Submódulos declarados (clone raso; um zip não traz o conteúdo deles).
+if [ -f "$REPO/.gitmodules" ]; then
+  git config -f "$REPO/.gitmodules" --get-regexp '^submodule\..*\.path$' | while read -r chave caminho; do
+    url=$(git config -f "$REPO/.gitmodules" --get "${chave%.path}.url")
+    if [ -n "$url" ] && [ ! -e "$REPO/$caminho/.git" ] && [ -z "$(ls -A "$REPO/$caminho" 2>/dev/null)" ]; then
+      echo "-- submódulo $caminho <- $url"
+      timeout 300 git clone --quiet --depth 1 "$url" "$REPO/$caminho" || echo "AVISO: falha ao clonar $url"
+    fi
+  done
+fi
+
+# 3. Remapeamentos do Foundry que apontam para lib/<nome> inexistente: liga ao pacote
+#    npm equivalente (node_modules/<nome>, node_modules/@*/<nome>, node_modules/@*/<nome>.sol).
+find "$REPO" -name foundry.toml -not -path '*/node_modules/*' -not -path '*/lib/*' | while read -r toml; do
+  dir=$(dirname "$toml")
+  { grep -hoE '"[^"=]+=[^"]+"' "$toml" | tr -d '"'; cat "$dir/remappings.txt" 2>/dev/null; } \
+    | grep -oE '=lib/[^/]+' | cut -d/ -f2 | sort -u | while read -r nome; do
+      [ -e "$dir/lib/$nome" ] && continue
+      alvo=""
+      for nm in "$dir/node_modules" "$REPO/node_modules"; do
+        for c in "$nm/$nome" "$nm"/@*/"$nome" "$nm"/@*/"$nome.sol"; do
+          [ -d "$c" ] && { alvo="$c"; break 2; }
+        done
+      done
+      if [ -n "$alvo" ]; then
+        mkdir -p "$dir/lib" && ln -s "$alvo" "$dir/lib/$nome" && echo "-- lib/$nome -> $alvo (em ${dir#$REPO/})"
+      else
+        echo "AVISO: lib/$nome não encontrado (em ${dir#$REPO/})"
+      fi
+    done
+done
+echo "== fim do preparo"

@@ -10,17 +10,19 @@ tem circom || tem circheck || pular "nem circom nem circheck instalados"
 libs=(-l "$REPO_DIR" -l "$REPO_DIR/node_modules" -l "$REPO_DIR/node_modules/circomlib/circuits")
 avisos=0
 while read -r f; do
-  nome=$(echo "$f" | tr '/.' '__')
+  # Fontes do repositório vêm relativos; os `main` gerados do circomkit, absolutos.
+  [[ "$f" == /* ]] && src="$f" || src="$REPO_DIR/$f"
+  nome=$(basename "$f" .circom | tr '/.' '__')
   if tem circom; then
     tmp=$(mktemp -d)
-    (cd "$(dirname "$REPO_DIR/$f")" && timeout 600 circom "$REPO_DIR/$f" --r1cs --inspect "${libs[@]}" -o "$tmp") \
+    (cd "$(dirname "$src")" && timeout 600 circom "$src" --r1cs --inspect "${libs[@]}" -o "$tmp") \
       > "$SDIR/$nome.inspect.log" 2>&1
     rm -rf "$tmp"
     n=$(grep -ciE '^warning|underconstrained|not constrained' "$SDIR/$nome.inspect.log") || true
     avisos=$((avisos + ${n:-0}))
   fi
   if tem circheck; then
-    timeout 600 circheck "$REPO_DIR/$f" > "$SDIR/$nome.circheck.log" 2>&1 || true
+    timeout 600 circheck "$src" > "$SDIR/$nome.circheck.log" 2>&1 || true
     n=$(grep -ciE 'warning|unconstrained|division' "$SDIR/$nome.circheck.log") || true
     avisos=$((avisos + ${n:-0}))
   fi

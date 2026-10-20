@@ -1,40 +1,81 @@
 #!/usr/bin/env bash
-# Etapa: Medusa — fuzzing stateful de invariantes (property_*, assertions)
+# Etapa: Medusa — fuzzing stateful de invariantes (property_*, echidna_*) + invariantes do forge
 . "$PIPELINE_DIR/lib/comum.sh"
 etapa_inicio 13-medusa Medusa
 
 inv_vazio solidity && pular "nenhum contrato Solidity encontrado"
-tem medusa || pular "medusa não instalado (go install github.com/crytic/medusa@latest)"
-TIPO=$(cat "$INV_DIR/projeto.txt")
-[ "$TIPO" = nenhum ] && pular "sem foundry.toml/hardhat.config — medusa precisa compilar o projeto"
-
+tem medusa || tem forge || pular "nem medusa nem forge instalados"
 cd "$REPO_DIR" || falhar "repositório inacessível"
 
-# Alvos: MEDUSA_ALVOS explícito ou contratos que declaram propriedades de fuzzing.
-alvos="${MEDUSA_ALVOS:-}"
-if [ -z "$alvos" ]; then
-  alvos=$(grep -rlIE --include='*.sol' --exclude-dir=node_modules --exclude-dir=lib \
-            'function (property_|echidna_|invariant_)' . 2>/dev/null \
-          | xargs -r grep -hoE '^\s*contract\s+[A-Za-z0-9_]+' | awk '{print $2}' | sort -u | paste -sd, -)
+# Raiz Foundry/Hardhat mais próxima de um arquivo (monorepos têm várias).
+raiz_de() {
+  local d; d=$(dirname "$1")
+  while [ "$d" != "." ] && [ "$d" != "/" ]; do
+    [ -f "$d/foundry.toml" ] || ls "$d"/hardhat.config.* >/dev/null 2>&1 && { echo "$d"; return; }
+    d=$(dirname "$d")
+  done
+  [ -f foundry.toml ] || ls hardhat.config.* >/dev/null 2>&1 && echo "."
+}
+
+EXC=(--exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-out --exclude-dir=out)
+falhas=0 rodadas=0 resumo=""
+
+# 1. Medusa sobre harnesses estilo Echidna/Medusa, agrupados por projeto.
+if tem medusa; then
+  declare -A alvos=()
+  if [ -n "${MEDUSA_ALVOS:-}" ]; then
+    alvos["${MEDUSA_RAIZ:-.}"]="$MEDUSA_ALVOS"
+  else
+    while read -r f; do
+      r=$(raiz_de "$f"); [ -n "$r" ] || continue
+      for c in $(grep -hoE '^\s*contract\s+[A-Za-z0-9_]+' "$f" | awk '{print $2}'); do
+        case ",${alvos[$r]:-}," in *",$c,"*) ;; *) alvos[$r]="${alvos[$r]:+${alvos[$r]},}$c" ;; esac
+      done
+    done < <(grep -rlIE --include='*.sol' "${EXC[@]}" 'function (property_|echidna_)' . 2>/dev/null | sed 's|^\./||')
+  fi
+  for r in "${!alvos[@]}"; do
+    # Só o contrato "folha" (não herdado por outro do projeto) é o harness: os pais
+    # costumam ser abstratos e o Medusa não os implanta.
+    herdados=$(grep -rhoIE --include='*.sol' "${EXC[@]}" '^\s*(abstract\s+)?contract\s+[A-Za-z0-9_]+\s+is\s+[^{]+' "$r" 2>/dev/null \
+      | sed -E 's/.*\sis\s+//' | tr ',' '\n' | sed -E 's/\(.*//; s/\s//g' | sort -u)
+    folhas=$(echo "${alvos[$r]}" | tr ',' '\n' | grep -vxF -f <(echo "$herdados") | paste -sd, -)
+    [ -n "$folhas" ] && alvos[$r]="$folhas"
+    nome=$(echo "$r" | tr '/.' '__')
+    log "medusa em $r: ${alvos[$r]}"
+    cfg=(); [ -f "$r/medusa.json" ] && cfg=(--config medusa.json)
+    (cd "$r" && timeout $(( ${MEDUSA_TIMEOUT:-900} + 300 )) medusa fuzz "${cfg[@]}" \
+        --target-contracts "${alvos[$r]}" --timeout "${MEDUSA_TIMEOUT:-900}" \
+        --workers "${MEDUSA_WORKERS:-$(nproc)}") > "$SDIR/medusa-$nome.log" 2>&1
+    n=$(grep -cE '\[FAILED\]' "$SDIR/medusa-$nome.log") || true
+    if grep -qiE 'compilation (failed|error)|CryticCompile:Compilation failed' "$SDIR/medusa-$nome.log"; then
+      resumo+="medusa $r: falha de compilação; "
+    else
+      rodadas=$((rodadas + 1)); falhas=$((falhas + ${n:-0}))
+      resumo+="medusa $r: ${n:-0} propriedade(s) quebrada(s); "
+    fi
+  done
 fi
-[ -n "$alvos" ] || pular "nenhum harness de invariantes (property_*/echidna_*/invariant_*); defina MEDUSA_ALVOS ou escreva propriedades"
 
-# Dependências: sem scripts de instalação (o repositório auditado não é confiável).
-if [ "$TIPO" = hardhat ] && [ -f package.json ] && [ ! -d node_modules ]; then
-  log "instalando dependências npm (--ignore-scripts)"
-  { npm ci --ignore-scripts || npm install --ignore-scripts; } > "$SDIR/npm.log" 2>&1
+# 2. Testes de invariantes do próprio projeto (forge invariant_*), por projeto Foundry.
+if tem forge; then
+  while read -r r; do
+    nome=$(echo "$r" | tr '/.' '__')
+    log "forge invariant em $r"
+    (cd "$r" && timeout "${FORGE_TIMEOUT:-1200}" forge test --match-test 'invariant' \
+        --fuzz-runs "${FORGE_RUNS:-256}" -vv) > "$SDIR/forge-invariant-$nome.log" 2>&1
+    rc=$?
+    n=$(grep -cE '^\[FAIL' "$SDIR/forge-invariant-$nome.log") || true
+    ok=$(grep -cE '^\[PASS' "$SDIR/forge-invariant-$nome.log") || true
+    if [ "${ok:-0}" -eq 0 ] && [ "${n:-0}" -eq 0 ]; then
+      resumo+="forge $r: sem execução (rc $rc, veja o log); "
+    else
+      rodadas=$((rodadas + 1)); falhas=$((falhas + ${n:-0}))
+      resumo+="forge $r: ${ok:-0} ok, ${n:-0} falha(s); "
+    fi
+  done < <(grep -rlIE --include='*.sol' "${EXC[@]}" 'function invariant_' . 2>/dev/null \
+            | sed 's|^\./||' | while read -r f; do r=$(raiz_de "$f"); [ -f "$r/foundry.toml" ] && echo "$r"; done | sort -u)
 fi
 
-cfg=()
-[ -f medusa.json ] && cfg=(--config medusa.json)
-log "alvos: $alvos"
-timeout $(( ${MEDUSA_TIMEOUT:-900} + 300 )) medusa fuzz "${cfg[@]}" \
-  --target-contracts "$alvos" --timeout "${MEDUSA_TIMEOUT:-900}" \
-  --workers "${MEDUSA_WORKERS:-$(nproc)}" > "$SDIR/medusa.log" 2>&1
-rc=$?
-
-falhas=$(grep -cE '\[FAILED\]' "$SDIR/medusa.log" 2>/dev/null) || true
-falhas=${falhas:-0}
-grep -qiE 'compilation (failed|error)|error while compiling' "$SDIR/medusa.log" && falhar "falha de compilação; veja medusa.log"
-[ "$rc" -ne 0 ] && [ "$falhas" -eq 0 ] && falhar "medusa saiu com código $rc; veja medusa.log"
-concluir "fuzzing de $alvos por ${MEDUSA_TIMEOUT:-900}s — $falhas invariante(s) quebrada(s)" "$falhas"
+[ -n "$resumo" ] || pular "nenhum harness de fuzzing (property_*/echidna_*) nem invariant_* encontrado; defina MEDUSA_ALVOS"
+[ "$rodadas" -eq 0 ] && falhar "${resumo%; }"
+concluir "${resumo%; }" "$falhas"

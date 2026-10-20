@@ -11,11 +11,13 @@ tem circom || pular "circom não instalado (Picus o usa para compilar)"
 
 inseguros=0 seguros=0 desconhecidos=0
 while read -r f; do
-  nome=$(echo "$f" | tr '/.' '__')
+  # Fontes do repositório vêm relativos; os `main` gerados do circomkit, absolutos.
+  [[ "$f" == /* ]] && src="$f" || src="$REPO_DIR/$f"
+  nome=$(basename "$f" .circom | tr '/.' '__')
   log "verificando $f"
-  (cd "$(dirname "$REPO_DIR/$f")" && timeout "${PICUS_TIMEOUT_TOTAL:-1800}" "$PICUS" \
+  (cd "$(dirname "$src")" && timeout "${PICUS_TIMEOUT_TOTAL:-1800}" "$PICUS" \
       --solver "${PICUS_SOLVER:-cvc5}" --timeout "${PICUS_SMT_TIMEOUT:-5000}" \
-      --json "$SDIR/$nome.json" "$REPO_DIR/$f") > "$SDIR/$nome.log" 2>&1
+      --json "$SDIR/$nome.json" "$src") > "$SDIR/$nome.log" 2>&1
   if grep -qiE 'unsafe|underconstrained' "$SDIR/$nome.log"; then
     inseguros=$((inseguros + 1)); echo "$f" >> "$SDIR/inseguros.txt"
   elif grep -qiE '\bsafe\b|properly constrained' "$SDIR/$nome.log"; then
