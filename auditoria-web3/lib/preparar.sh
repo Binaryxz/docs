@@ -47,10 +47,15 @@ find "$REPO" -name foundry.toml -not -path '*/node_modules/*' -not -path '*/lib/
     | grep -oE '=lib/[^/]+' | cut -d/ -f2 | sort -u | while read -r nome; do
       [ -e "$dir/lib/$nome" ] && continue
       alvo=""
-      for nm in "$dir/node_modules" "$REPO/node_modules"; do
-        # O pacote Solidity (nome.sol) vem antes do homônimo JS: @zk-kit/lean-imt.sol, não @zk-kit/lean-imt.
-        for c in "$nm/$nome.sol" "$nm"/@*/"$nome.sol" "$nm/$nome" "$nm"/@*/"$nome"; do
-          [ -d "$c" ] && { alvo="$c"; break 2; }
+      # O pacote Solidity (nome.sol) vem antes do homônimo JS, em qualquer node_modules
+      # (@zk-kit/lean-imt.sol, não @zk-kit/lean-imt); e só vale um diretório com .sol.
+      for padrao in "%s.sol" "@*/%s.sol" "%s" "@*/%s"; do
+        for nm in "$dir/node_modules" "$REPO/node_modules"; do
+          for c in $nm/$(printf "$padrao" "$nome"); do
+            if [ -d "$c" ] && find -L "$c" -maxdepth 3 -name '*.sol' -print -quit | grep -q .; then
+              alvo="$c"; break 3
+            fi
+          done
         done
       done
       if [ -n "$alvo" ]; then
