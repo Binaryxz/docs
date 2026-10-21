@@ -74,7 +74,14 @@ def secao_achado(a):
         ("Resposta do cliente", "resposta_cliente"),
         ("Revisão da correção", "revisao_correcao"),
     ]:
-        out += ["", f"**{titulo}**", "", a.get(chave) or PENDENTE]
+        valor = a.get(chave)
+        if not valor:
+            # Informativos não têm impacto nem exploração; resposta e revisão vêm depois do time.
+            if chave in ("impacto_texto", "exploracao") and a["_sev"] in ("Informativa", "Gas"):
+                continue
+            valor = {"resposta_cliente": "Aguardando resposta do time.",
+                     "revisao_correcao": "Aguardando correção."}.get(chave, PENDENTE)
+        out += ["", f"**{titulo}**", "", valor]
     return out + [""]
 
 
