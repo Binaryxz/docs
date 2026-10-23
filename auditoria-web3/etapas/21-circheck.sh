@@ -22,10 +22,11 @@ while read -r f; do
     avisos=$((avisos + ${n:-0}))
   fi
   if tem circheck; then
-    # Pelo wrapper: o parser recursivo do Circheck estoura a pilha padrão no Poseidon do circomlib.
-    timeout 600 python3 "$PIPELINE_DIR/lib/circheck_run.py" "$src" > "$SDIR/$nome.circheck.log" 2>&1 || true
+    # Pelo wrapper: sem ele o Circheck não analisa circuitos com o Poseidon do circomlib
+    # (recursão, componente usado antes de criado, atribuição de array inteiro).
+    timeout 1800 python3 "$PIPELINE_DIR/lib/circheck_run.py" "$src" --json "$SDIR/$nome.circheck.json" > "$SDIR/$nome.circheck.log" 2>&1 || true
     grep -q 'Analysis failed' "$SDIR/$nome.circheck.log" && falhas_ch=$((falhas_ch + 1))
-    n=$(grep -ciE 'warning|unconstrained|division' "$SDIR/$nome.circheck.log") || true
+    n=$(grep -oE 'Total warnings: [0-9]+' "$SDIR/$nome.circheck.log" | grep -oE '[0-9]+$' | tail -1) || true
     avisos=$((avisos + ${n:-0}))
   fi
 done < "$INV_DIR/circom_main.txt"
