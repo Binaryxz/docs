@@ -50,17 +50,26 @@ WEBMAIL = {
 }
 
 
+# Uma chave compartilhada por mais CNPJs que isso não é carteira de um
+# escritório: é placeholder, provedor genérico ou plataforma nacional
+LIMITE_CHAVE = 3000
+
+
 def chave_email(email: str) -> str:
     email = (email or "").strip().lower()
     if "@" not in email:
         return ""
     dominio = email.split("@", 1)[1].strip()
+    if "." not in dominio or len(set(re.sub(r"[^a-z]", "", dominio))) <= 2 or dominio.startswith(("gmail.", "hotmail.", "yahoo.", "outlook.")):
+        return "e:" + email if dominio.startswith(("gmail.", "hotmail.", "yahoo.", "outlook.")) else ""
     return "e:" + (email if dominio in WEBMAIL else dominio)
 
 
 def chave_tel(ddd: str, tel: str) -> str:
     d = re.sub(r"\D", "", (ddd or "") + (tel or ""))
-    return "t:" + d if len(d) >= 10 else ""
+    if len(d) < 10 or len(set(d[-8:])) == 1:  # placeholder (00000000, 11111111...)
+        return ""
+    return "t:" + d
 
 
 def main() -> None:
@@ -98,10 +107,13 @@ def main() -> None:
                 clientes[k][row["cnpj_basico"]] = grupo
         print(f"  lido {caminho}", file=sys.stderr)
 
+    descartadas = {k for k, v in clientes.items() if len(v) > LIMITE_CHAVE}
+    print(f"  {len(descartadas)} chave(s) com mais de {LIMITE_CHAVE} CNPJs descartadas (genéricas): "
+          + ", ".join(sorted(descartadas)[:10]), file=sys.stderr)
     for lead in leads:
         b = lead["cnpj"][:8]
         carteira: dict[str, str] = {}
-        for k in chaves_do_lead[b]:
+        for k in chaves_do_lead[b] - descartadas:
             carteira.update(clientes.get(k, {}))
         carteira.pop(b, None)  # o próprio escritório não é cliente
         total = len(carteira)
