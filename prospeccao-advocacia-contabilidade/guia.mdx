@@ -26,6 +26,7 @@ Scripts em [`/prospeccao-advocacia-contabilidade/scripts`](https://github.com/bi
 | 4. Telefone | `preparar_telefones.py` (reaproveita o `validar_telefone.py` da fintech sem mudança) |
 | 5. WhatsApp | `checar_whatsapp_checknumber.py` |
 | 5.5 Contato do dono | `sinais_dono.py` |
+| 5.6 Nicho | `filtrar_nicho.py`, `carteira_contador.py` |
 | 6. Saídas | `gerar_saidas.py` |
 
 Dependências: Python 3.10+ e `prospeccao-fintech/scripts/requirements.txt` (`pandas`, `phonenumbers`, `requests`).
@@ -193,6 +194,20 @@ Rode **antes** da checagem de WhatsApp para pagar só pelos números com sinal. 
 Nas listas de 2026-10-19 (mil contatos por segmento, todos com sinal):
 - **Advocacia:** 951 têm o e-mail de um sócio identificado, 338 são de uma pessoa só e 289 têm os dois sinais.
 - **Contábil:** 912 são de uma pessoa só, 602 têm o e-mail de um sócio e 514 têm os dois.
+
+## Etapa 5.6 — Nichos: advocacia patrimonial e contador de negócios digitais
+
+Sub-filtros em cima das listas de segmento (não relêem a base da Receita).
+
+**`filtrar_nicho.py --nicho advocacia_patrimonial`**: tributário (TRIBUTARI\*, FISCAL, TAX, ICMS...), societário (SOCIETARI\*, EMPRESARIA\*, CORPORAT\*, M&A, GOVERNANCA, STARTUP\*...), família e sucessões (FAMILIA, SUCESSOES, SUCESSORI\*, INVENTARIO\*, HERANCA\*, TESTAMENTO\*) e patrimonial (PATRIMONI\*, HOLDING\*, WEALTH, FAMILY OFFICE, TRUST\*, OFFSHORE, BOUTIQUE). Negativas: criminal, trabalhista, previdenciário, consumidor, trânsito. Procura no nome e no e-mail, mas **ignora e-mail com cara de contador** (`fiscal@xyzcontabil...`), porque a Receita traz muito e-mail do contador que abriu o CNPJ.
+
+**`filtrar_nicho.py --nicho contabil_digital`**: digital (DIGITAL, ONLINE, VIRTUAL, TECH, ECOMMERCE...), infoprodutores (INFOPRODUT\*, CREATOR\*, INFLUENC\*, MARKETING DIGITAL, HOTMART...), exportação/câmbio (EXPORT\*, INTERNACIONA\*, CAMBIO, MULTIMOEDA, NOMADE\*, COMEX...) e traders/cripto (TRADER\*, DAY TRADE, FOREX, CRIPTO\*, BITCOIN...).
+
+**`carteira_contador.py`**: o sinal mais forte para contador. O contador cadastra o próprio e-mail/telefone nos CNPJs dos clientes, então dá para contar quantos clientes da carteira são negócios digitais (cursos/infoprodutos, marketing, software/TI, gestão de investimentos). Chaves compartilhadas por mais de 3.000 CNPJs (placeholder, provedor genérico, plataforma nacional) são descartadas.
+
+Advocacia não tem esse sinal (o nome quase nunca diz a área). Além da palavra-chave, um proxy de **estrutura de boutique**: sociedade de advogados (não individual), capital social ≥ R$ 100 mil, em SP/RJ/DF/MG/PR/RS/SC.
+
+Primeira rodada (01/11/2026, inéditos, WhatsApp confirmado): 1.128 advogados (9 nome+estrutura, 159 nome de área, 960 só estrutura) e 1.773 contadores (29 carteira+nome, 514 carteira digital ≥10 clientes e ≥25%, 1.230 só nome digital). Nesses nichos o fixo entra: escritório contábil com carteira grande quase sempre usa fixo, muitas vezes com WhatsApp Business.
 
 ## Etapa 6 — Saídas (template de disparo + WATI)
 
