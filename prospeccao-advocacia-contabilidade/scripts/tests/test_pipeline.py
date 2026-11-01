@@ -252,3 +252,32 @@ def test_socio_do_email():
     assert sd.socio_do_email("CRISTIANECADE@HOTMAIL.COM", socios) == "CRISTIANE CADE DE OLIVEIRA"
     assert sd.socio_do_email("contato@escritorio.com.br", socios) == ""
     assert sd.socio_do_email("silva.adv@gmail.com", ["JOAO DA SILVA"]) == ""  # sobrenome comum não conta
+
+
+def test_nicho_email_do_contador_nao_conta(tmp_path):
+    cols = ["cnpj", "razao_social", "nome_fantasia", "correio_eletronico", "cnae_fiscal_principal", "cnae_fiscal_secundaria"]
+    linhas = [
+        ["1", "SILVA SOCIEDADE INDIVIDUAL DE ADVOCACIA", "", "fiscal@holdingcontabilidade.com.br", "6911701", ""],
+        ["2", "SOUZA ADVOCACIA", "", "souza@souzapatrimonial.adv.br", "6911701", ""],
+        ["3", "LIMA DIREITO TRIBUTARIO", "", "", "6911701", ""],
+        ["4", "COSTA ADVOGADOS", "", "sucessodocliente@x.com", "6911701", ""],
+        ["5", "PENA ADVOCACIA CRIMINAL E TRIBUTARIA", "", "", "6911701", ""],
+    ]
+    entrada, saida = tmp_path / "in.csv", tmp_path / "out.csv"
+    with open(entrada, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(cols)
+        w.writerows(linhas)
+    r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "filtrar_nicho.py"), "--nicho", "advocacia_patrimonial",
+                        str(entrada), str(saida)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    with open(saida, encoding="utf-8") as fh:
+        res = {row["cnpj"]: row["nicho_tags"] for row in csv.DictReader(fh)}
+    assert res == {"2": "patrimonial", "3": "tributario"}
+
+
+def test_chave_carteira():
+    import carteira_contador as cc
+    assert cc.chave_email("Joao@Gmail.com") == "e:joao@gmail.com"
+    assert cc.chave_email("fiscal@xyzcontabil.com.br") == "e:xyzcontabil.com.br"
+    assert cc.chave_tel("11", "98888-7777") == "t:11988887777"
